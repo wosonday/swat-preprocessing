@@ -1,0 +1,19 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"name": "Synthetic example boundary"},
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [499900, 1599900],
+          [500200, 1599900],
+          [500200, 1600200],
+          [499900, 1600200],
+          [499900, 1599900]
+        ]]
+      }
+    }
+  ]
+}

@@ -98,3 +98,32 @@ def streamflow_csv(tmp_dir):
     path = tmp_dir / "streamflow.csv"
     df.to_csv(path, index=False)
     return path
+
+
+@pytest.fixture
+def landuse_lookup_csv(tmp_dir):
+    """Land-use lookup: source_code → SWAT code + name."""
+    content = textwrap.dedent("""\
+        code,swat_code,swat_name
+        10,AGRL,Agricultural Land Generic
+        20,FRST,Forest Evergreen
+        30,URBN,Residential
+        40,WATR,Water
+    """)
+    path = tmp_dir / "landuse_lookup.csv"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def soil_table_csv(tmp_dir):
+    """Minimal soil table with SWAT-required columns."""
+    content = textwrap.dedent("""\
+        soil_id,HYDGRP,SOL_ZMX,NLAYERS,SOL_Z1,SOL_BD1,SOL_AWC1,SOL_K1,SOL_CBN1,CLAY1,SILT1,SAND1
+        1001,B,1500,2,300,1.35,0.18,12.5,1.2,25,40,35
+        1002,C,2000,2,400,1.42,0.15,8.0,0.8,35,30,35
+        1003,A,1000,1,200,1.28,0.22,25.0,1.5,15,50,35
+    """)
+    path = tmp_dir / "soil_table.csv"
+    path.write_text(content, encoding="utf-8")
+    return path

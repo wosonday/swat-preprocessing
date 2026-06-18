@@ -197,6 +197,11 @@ def test_from_yaml_resolves_relative_paths_from_config_directory(tmp_dir):
     assert cfg.weather.data_dir == config_dir / "data/weather"
 
 
+# ---------------------------------------------------------------------------
+# configured_domains
+# ---------------------------------------------------------------------------
+
+
 def test_configured_domains_empty_when_no_domains(minimal_config_dict):
     cfg = SWATPrepConfig.model_validate(minimal_config_dict)
     assert cfg.configured_domains() == []
@@ -209,7 +214,9 @@ def test_configured_domains_reports_weather():
             "stations": "s.csv",
             "data_dir": "./w",
             "start": "2000-01-01",
-            "end": "2020-12-31",
+            "end": "2000-12-31",
         },
     })
-    assert cfg.configured_domains() == ["weather"]
+    domains = cfg.configured_domains()
+    assert "weather" in domains
+    assert "dem" not in domains

@@ -23,7 +23,7 @@ from .errors import SWATPrepError
 @click.group()
 @click.version_option(package_name="swatprep")
 def main() -> None:
-    """swatprep — Preprocess raw data for SWAT/SWAT+ workflows."""
+    """swatprep -- Preprocess raw data for SWAT/SWAT+ workflows."""
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ def validate(config: Path) -> None:
         fail_list = failures(checks)
 
         for c in checks:
-            symbol = {"pass": "✓", "warn": "!", "fail": "✗"}[c.status]
+            symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
             click.echo(f"  {symbol} {c.name}: {c.message}")
 
         if warn_list:
@@ -59,7 +59,7 @@ def validate(config: Path) -> None:
 
         domains = cfg.configured_domains()
         click.echo(
-            f"\nConfig OK — project '{cfg.project.name}', "
+            f"\nConfig OK -- project '{cfg.project.name}', "
             f"domains: {', '.join(domains) or 'none configured'}"
         )
 
@@ -94,16 +94,18 @@ def prepare(config: Path, only: str | None) -> None:
         project = SWATPrepProject.from_config(config)
         result = project.prepare(only=only)
 
-        click.echo(f"Done → {result.output_dir}")
+        if result.manifest_path:
+            click.echo(f"Done  -> {result.output_dir}")
+            click.echo(f"Manifest -> {result.manifest_path}")
+        else:
+            click.echo("No domains configured -- nothing to prepare.")
+
         if result.warning_count:
             click.echo(f"Warnings: {result.warning_count}")
         if not result.success:
             click.echo(f"Failed: {result.error_count} error(s).", err=True)
             sys.exit(1)
 
-    except NotImplementedError as e:
-        click.echo(f"Not implemented yet: {e}", err=True)
-        sys.exit(1)
     except SWATPrepError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -140,7 +142,7 @@ def _inspect_raster(path: Path) -> None:
         click.echo(f"Driver : {ds.driver}")
         click.echo(f"CRS    : {ds.crs}")
         click.echo(f"Bounds : {ds.bounds}")
-        click.echo(f"Shape  : {ds.height} rows × {ds.width} cols × {ds.count} band(s)")
+        click.echo(f"Shape  : {ds.height} rows x {ds.width} cols x {ds.count} band(s)")
         click.echo(f"Res    : {ds.res}")
         click.echo(f"NoData : {ds.nodata}")
         click.echo(f"Dtype  : {ds.dtypes[0]}")

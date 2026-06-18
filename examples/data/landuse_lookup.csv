@@ -1,0 +1,5 @@
+code,swat_code,swat_name
+10,AGRL,Agricultural Land Generic
+20,FRST,Forest Evergreen
+30,URBN,Residential
+40,WATR,Water

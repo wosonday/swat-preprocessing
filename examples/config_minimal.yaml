@@ -8,7 +8,7 @@
 project:
   name: "ExampleBasin_2024"
   crs: "EPSG:32648"                  # UTM Zone 48N — change to your basin CRS
-  boundary: "./data/boundary.gpkg"   # project boundary (GeoPackage / Shapefile)
+  boundary: "./data/boundary.geojson" # project boundary (GeoJSON)
   output_dir: "./output"
   targets:
     - "swatplus"                     # "swat" | "swatplus" | both
@@ -40,7 +40,7 @@ weather:
     - "tmax"
     - "tmin"
   start: "2000-01-01"
-  end: "2020-12-31"
+  end: "2000-01-10"
   units:
     precip: "mm"
     temperature: "degC"

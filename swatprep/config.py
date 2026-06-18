@@ -3,9 +3,10 @@
 Load from YAML:
     cfg = SWATPrepConfig.from_yaml("config.yaml")
 
-All Path fields are stored as-is (relative to the caller's working directory).
-Existence checks happen at preprocessing time, not at load time, so that
-`swatprep validate` can report all missing files at once rather than one by one.
+Paths in YAML are resolved relative to the config file's directory,
+so the same config works regardless of the working directory at run time.
+Existence checks happen in preprocessing, not here, so validate can
+report all missing files at once.
 """
 
 from __future__ import annotations
@@ -15,8 +16,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
-from pydantic import BaseModel, Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +39,7 @@ class DEMConfig(BaseModel):
 
 class LandUseConfig(BaseModel):
     raster: Path
-    lookup: Path  # CSV with columns: source_code_col, swat_code_col, swat_name_col
+    lookup: Path  # CSV columns: source_code_col, swat_code_col, swat_name_col
     source_code_col: str = "code"
     swat_code_col: str = "swat_code"
     swat_name_col: str = "swat_name"
@@ -59,13 +59,13 @@ class WeatherUnitsConfig(BaseModel):
 
 class WeatherConfig(BaseModel):
     stations: Path  # CSV: id, name, lat, lon, elev
-    data_dir: Path  # directory containing one CSV per station named {id}.csv
+    data_dir: Path  # directory; one CSV per station named {id}.csv
     format: Literal["csv"] = "csv"
     variables: list[
         Literal["precip", "tmax", "tmin", "wind", "solar", "humidity"]
     ] = Field(default=["precip", "tmax", "tmin"])
-    start: date  # ISO date "YYYY-MM-DD"
-    end: date  # ISO date "YYYY-MM-DD"
+    start: date  # ISO "YYYY-MM-DD"
+    end: date    # ISO "YYYY-MM-DD"
     units: WeatherUnitsConfig = Field(default_factory=WeatherUnitsConfig)
     missing_policy: Literal["fail", "warn"] = "fail"
 
@@ -99,8 +99,11 @@ class SWATPrepConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "SWATPrepConfig":
-        """Load and validate config from a YAML file."""
-        config_path = Path(path)
+        """Load and validate config from a YAML file.
+
+        All relative paths are resolved against the config file's directory.
+        """
+        config_path = Path(path).resolve()
         with open(config_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         cfg = cls.model_validate(data)
@@ -108,16 +111,16 @@ class SWATPrepConfig(BaseModel):
         return cfg
 
     def configured_domains(self) -> list[str]:
-        """Return which optional domains are configured."""
-        domains = []
-        for name in ("dem", "landuse", "soil", "weather", "streamflow"):
-            if getattr(self, name) is not None:
-                domains.append(name)
-        return domains
+        """Return the list of optional domains that are configured."""
+        return [
+            name
+            for name in ("dem", "landuse", "soil", "weather", "streamflow")
+            if getattr(self, name) is not None
+        ]
 
     def _resolve_relative_paths(self, base_dir: Path) -> None:
-        """Resolve YAML path fields relative to the config file location."""
-        path_fields = [
+        """Resolve relative path fields to be absolute, anchored at base_dir."""
+        _PATH_FIELDS = [
             ("project", "boundary"),
             ("project", "output_dir"),
             ("dem", "path"),
@@ -129,10 +132,10 @@ class SWATPrepConfig(BaseModel):
             ("weather", "data_dir"),
             ("streamflow", "path"),
         ]
-        for section_name, field_name in path_fields:
+        for section_name, field_name in _PATH_FIELDS:
             section = getattr(self, section_name)
             if section is None:
                 continue
-            value = getattr(section, field_name)
+            value: Optional[Path] = getattr(section, field_name)
             if value is not None and not value.is_absolute():
                 setattr(section, field_name, base_dir / value)

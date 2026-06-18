@@ -17,20 +17,24 @@ WhiteboxTools, PEST, or SWAT+ Toolbox.
 Implemented:
 
 - Config schema in `swatprep/config.py`
-- High-level API skeleton in `swatprep/api.py`
-- CLI skeleton in `swatprep/cli.py`
+- High-level prepare orchestration in `swatprep/api.py`
+- CLI in `swatprep/cli.py`
 - QA primitives in `swatprep/qa.py`
 - Typed errors in `swatprep/errors.py`
+- Domain processors under `swatprep/core/`
+- Writers under `swatprep/writers/`
+- Manifest and QA report writing
 - Tests in `tests/`
 
 Not implemented:
 
-- Domain processors under `swatprep/core/`
-- Writers under `swatprep/writers/`
-- Manifest and QA report writing
-- End-to-end `prepare()` pipeline
+- Full watershed delineation
+- HRU/LSU generation
+- Complete SWAT+ `project.sqlite` export
+- Calibration or uncertainty workflow
 
-`SWATPrepProject.prepare()` intentionally raises `NotImplementedError`.
+`SWATPrepProject.prepare()` runs configured domains and writes a manifest when
+at least one domain is processed.
 
 ## Scope Rules
 
@@ -54,7 +58,7 @@ Do not:
 - Add calibration or sensitivity analysis.
 - Add automatic public data download.
 - Add a GUI.
-- Claim `prepare()` works until processors and writers exist and tests prove it.
+- Claim SWAT/SWAT+ model compatibility beyond the files the tests cover.
 
 ## Hydrology and SWAT Assumptions
 
@@ -100,6 +104,8 @@ python -m compileall swatprep tests
 python -m build --sdist --wheel
 ```
 
+Current baseline: `pytest -q` passes with 87 tests.
+
 For CLI changes, also run:
 
 ```bash
@@ -107,8 +113,8 @@ swatprep validate examples/config_minimal.yaml
 python -m swatprep.cli validate examples/config_minimal.yaml
 ```
 
-The example validation command is expected to exit non-zero until placeholder
-input files under `examples/data/` exist.
+The example validation command is expected to exit 0 because synthetic input
+files are included under `examples/data/`.
 
 ## Documentation Rules
 
@@ -116,7 +122,8 @@ When updating docs:
 
 - State implemented and not implemented features separately.
 - Keep README aligned with `SYSTEM_DESIGN.md`.
-- Mention expected failures when examples use placeholder data.
+- Keep example behavior accurate; `examples/config_minimal.yaml` should validate
+  and prepare successfully with the included synthetic data.
 - Keep non-goals visible so future agents do not expand MVP into a full model
   builder.
 
