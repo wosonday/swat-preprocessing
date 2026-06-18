@@ -1,3 +1,35 @@
-docs/
-AGENTS.md
-SYSTEM_DESIGN.md
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test/cache artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE/editor
+.idea/
+.vscode/
+
+# Local agent/tooling state
+.agents/
+.codex/
+
+# Example outputs
+examples/output/
