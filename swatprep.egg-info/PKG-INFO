@@ -1,0 +1,237 @@
+Metadata-Version: 2.4
+Name: swatprep
+Version: 0.1.0
+Summary: Preprocess raw geospatial and hydro-meteorological data for SWAT/SWAT+ workflows
+License-Expression: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.0
+Requires-Dist: click>=8.0
+Requires-Dist: pandas>=2.0
+Requires-Dist: numpy>=1.24
+Requires-Dist: pyyaml>=6.0
+Provides-Extra: geo
+Requires-Dist: rasterio>=1.3; extra == "geo"
+Requires-Dist: geopandas>=0.14; extra == "geo"
+Requires-Dist: shapely>=2.0; extra == "geo"
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0; extra == "dev"
+
+# swatprep
+
+`swatprep` is a small Python library and CLI for preparing raw DEM, land-use,
+soil, weather, and streamflow inputs for SWAT Classic and SWAT+ workflows.
+
+The project is intentionally scoped as a **preprocessor and format writer**. It
+does not replace QSWAT, QSWAT+, SWAT+ Editor, TauDEM, WhiteboxTools, or model
+calibration tools.
+
+## Project Status
+
+Current version: `0.1.0`
+
+Implemented:
+
+- Pydantic config schema
+- YAML config loading with relative paths resolved from the config file location
+- High-level `SWATPrepProject` API skeleton
+- Click CLI skeleton
+- QA check primitives
+- Unit tests for config, API skeleton behavior, and QA behavior
+
+Not implemented yet:
+
+- DEM, land-use, soil, weather, and streamflow processors
+- SWAT Classic / SWAT+ text format writers
+- `manifest.json` and `qa_report.md` writers
+- End-to-end SWAT-ready output package generation
+
+`swatprep prepare` currently raises `NotImplementedError` until processors and
+writers are implemented.
+
+## Design Scope
+
+SWAT/SWAT+ setup has two separate jobs:
+
+1. Prepare reliable input data: projection, clipping, lookup validation, unit
+   conversion, weather continuity checks, and SWAT-compatible tables/files.
+2. Build the model structure: watershed delineation, stream network, subbasins,
+   LSUs/HRUs, routing objects, and full SWAT+ project database.
+
+`swatprep` targets job 1. Job 2 should remain in QSWAT/QSWAT+, SWAT+ Editor,
+TauDEM, WhiteboxTools, or a separate specialized workflow.
+
+See [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) for the reviewed architecture.
+
+## Install
+
+For development:
+
+```bash
+pip install -e .[dev]
+```
+
+For future geospatial processors:
+
+```bash
+pip install -e .[geo]
+```
+
+The geospatial extra installs `rasterio`, `geopandas`, and `shapely`. Keep those
+dependencies optional so the config, CLI, and non-spatial utilities remain
+lightweight.
+
+## CLI
+
+Validate a config and input file paths:
+
+```bash
+swatprep validate examples/config_minimal.yaml
+```
+
+Run preparation once processors are implemented:
+
+```bash
+swatprep prepare examples/config_minimal.yaml
+```
+
+Inspect a weather CSV:
+
+```bash
+swatprep inspect weather path/to/station.csv
+```
+
+Inspect a raster:
+
+```bash
+swatprep inspect raster path/to/dem.tif
+```
+
+The example config references placeholder files under `examples/data/`, so
+`swatprep validate examples/config_minimal.yaml` is expected to fail until those
+files exist.
+
+## Python API
+
+```python
+from swatprep import SWATPrepProject
+
+project = SWATPrepProject.from_config("examples/config_minimal.yaml")
+checks = project.validate()
+
+for check in checks:
+    print(check.status, check.name, check.message)
+```
+
+The future high-level preparation API is:
+
+```python
+result = project.prepare()
+print(result.output_dir)
+print(result.manifest_path)
+print(result.warning_count)
+```
+
+That call is intentionally not implemented yet.
+
+## Config Overview
+
+Minimal config:
+
+```yaml
+project:
+  name: "ExampleBasin_2024"
+  crs: "EPSG:32648"
+  output_dir: "./output"
+  targets:
+    - "swatplus"
+```
+
+Full config sections supported by the schema:
+
+- `project`
+- `dem`
+- `landuse`
+- `soil`
+- `weather`
+- `streamflow`
+
+Relative paths are resolved from the directory containing the YAML file. This
+makes runs reproducible when launched from different working directories.
+
+Weather dates are validated as ISO dates. `weather.end` must be on or after
+`weather.start`.
+
+## Expected MVP Output
+
+Once implemented, the MVP should produce a SWAT-ready input package, not a
+complete runnable model:
+
+```text
+output/
+  manifest.json
+  qa_report.md
+  spatial/
+  weather/
+  observed/
+  swatplus_import/
+  swat_classic_import/
+```
+
+Every written file should be listed in `manifest.json`, and QA failures should
+block writing.
+
+## Development
+
+Run tests:
+
+```bash
+pytest -q
+```
+
+Check Python syntax:
+
+```bash
+python -m compileall swatprep tests
+```
+
+Build package:
+
+```bash
+python -m build --sdist --wheel
+```
+
+Current verified state:
+
+- `pytest -q` passes with 27 tests.
+- `python -m compileall swatprep tests` passes.
+- `python -m build --sdist --wheel` passes.
+
+## Implementation Order
+
+Recommended next steps:
+
+1. Manifest and QA writers
+2. Weather CSV processor and precipitation/temperature writers
+3. Streamflow observation processor
+4. Land-use lookup validation and reclassification
+5. Soil table validation and `usersoil.csv` writer
+6. DEM validation, clipping, and reprojection
+7. End-to-end synthetic example
+
+Keep each step independently testable with synthetic fixtures.
+
+## Non-Goals
+
+Do not add these to the MVP:
+
+- Full watershed delineation from DEM
+- HRU/LSU generation
+- Complete SWAT+ `project.sqlite` writer
+- Calibration, sensitivity analysis, or uncertainty analysis
+- Automatic public data download
+- GUI
+
+These may be future extensions only after the core preprocessing package is
+working and tested.

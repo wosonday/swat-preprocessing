@@ -1,0 +1,54 @@
+# Minimal example config for swatprep
+# Demonstrates all supported sections. Remove sections you don't need.
+#
+# Usage:
+#   swatprep validate examples/config_minimal.yaml
+#   swatprep prepare examples/config_minimal.yaml
+
+project:
+  name: "ExampleBasin_2024"
+  crs: "EPSG:32648"                  # UTM Zone 48N — change to your basin CRS
+  boundary: "./data/boundary.gpkg"   # project boundary (GeoPackage / Shapefile)
+  output_dir: "./output"
+  targets:
+    - "swatplus"                     # "swat" | "swatplus" | both
+
+dem:
+  path: "./data/dem_30m.tif"
+  output_name: "dem_projected.tif"
+
+landuse:
+  raster: "./data/landuse_2020.tif"
+  lookup: "./data/landuse_lookup.csv"
+  # lookup columns (defaults shown)
+  source_code_col: "code"
+  swat_code_col: "swat_code"
+  swat_name_col: "swat_name"
+
+soil:
+  raster: "./data/soil_map.tif"
+  table: "./data/soil_properties.csv"
+  soil_key_col: "soil_id"
+  output_usersoil: true
+
+weather:
+  stations: "./data/weather_stations.csv"   # columns: id, name, lat, lon, elev
+  data_dir: "./data/weather"                # one CSV per station: {id}.csv
+  format: "csv"
+  variables:
+    - "precip"
+    - "tmax"
+    - "tmin"
+  start: "2000-01-01"
+  end: "2020-12-31"
+  units:
+    precip: "mm"
+    temperature: "degC"
+  missing_policy: "fail"               # "fail" | "warn"
+
+streamflow:
+  path: "./data/streamflow.csv"
+  date_col: "date"
+  station_id_col: "station_id"
+  value_col: "flow"
+  units: "m3s"                         # "m3s" | "mm"
