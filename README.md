@@ -16,14 +16,19 @@ Implemented:
 - YAML config schema with Pydantic
 - Config-relative path resolution
 - Project validation CLI
-- `prepare()` orchestration for configured domains
+- `build()` orchestration for configured domains
 - DEM metadata validation
 - Land-use lookup validation and raster-code cross-check
 - Soil table validation and raster-code cross-check
 - Weather station/daily CSV validation and WGN statistic generation
+- Weather output as **SWAT+** (default) or **SWAT Classic**, selected by
+  `project.targets`, with split precip/temperature sources and a configurable
+  `file_pattern`
 - Streamflow CSV validation
 - Writers for spatial metadata, land-use lookup, `usersoil.csv`, weather files,
   observed streamflow, `manifest.json`, and `qa_report.md`
+- Raw-data converters (`swatprep convert …`) for turning vendor formats into
+  swatprep CSVs or SWAT+/SWAT Classic files
 - Unit tests for config, QA, processors, writers, CLI-oriented behavior, and
   manifest generation
 
@@ -67,14 +72,14 @@ swatprep validate examples/config_minimal.yaml
 Run all configured domains:
 
 ```bash
-swatprep prepare config.yaml
+swatprep build config.yaml
 ```
 
 Run one domain:
 
 ```bash
-swatprep prepare config.yaml --only weather
-swatprep prepare config.yaml --only streamflow
+swatprep build config.yaml --only weather
+swatprep build config.yaml --only streamflow
 ```
 
 The included example contains synthetic data and should validate successfully.
@@ -91,6 +96,31 @@ Inspect a raster:
 swatprep inspect raster path/to/dem.tif
 ```
 
+### Convert raw data
+
+Standalone converters transform vendor formats into swatprep CSVs or directly
+into SWAT files, independent of the `build` pipeline:
+
+```bash
+# Merge per-variable .day files (R_/Tx_/Tm_) into per-station CSVs
+swatprep convert climate DATA_DIR OUT_DIR
+
+# Wide or per-station streamflow → long-format CSV
+swatprep convert streamflow SOURCE OUT_PATH
+
+# Raw precipitation / temperature → SWAT 2012 (Classic) .pcp / .tmp
+swatprep convert pcp MASTER_PATH DATA_DIR OUT_DIR
+swatprep convert tmp MASTER_PATH DATA_DIR OUT_DIR
+
+# SWAT Classic pcp + tmp → SWAT+ weather files (.pcp/.tmp + pcp.cli/tmp.cli)
+swatprep convert swatplus MASTER_PATH PCP_DIR TMP_DIR OUT_DIR
+```
+
+Use converters to *prepare* raw data into per-station CSVs, then point
+`weather.data_dir` at them and run `swatprep build`. See
+[`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) for how weather output maps to
+SWAT+/Classic.
+
 ## Python API
 
 ```python
@@ -102,13 +132,13 @@ checks = project.validate()
 for check in checks:
     print(check.status, check.name, check.message)
 
-result = project.prepare()
+result = project.build()
 print(result.success)
 print(result.output_dir)
 print(result.manifest_path)
 ```
 
-`prepare()` writes `manifest.json` and `qa_report.md` when at least one domain is
+`build()` writes `manifest.json` and `qa_report.md` when at least one domain is
 processed.
 
 ## Config Overview
@@ -139,9 +169,27 @@ process working directory.
 Weather dates are validated as ISO dates. `weather.end` must be on or after
 `weather.start`.
 
+A typical `weather` section (output format is driven by `project.targets`
+above):
+
+```yaml
+weather:
+  stations: "./data/weather_stations.csv"   # id, name, lat, lon, elev
+  data_dir: "./data/weather"                # one CSV per station
+  file_pattern: "{id}.csv"                   # default; use "{name}.csv" to match by name
+  variables: ["precip", "tmax", "tmin"]
+  start: "2000-01-01"
+  end:   "2000-12-31"
+  missing_policy: "warn"                     # "fail" | "warn"
+```
+
+Precipitation and temperature can be drawn from separate station networks via
+`weather.precip` / `weather.temp` sub-blocks — see
+[`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md).
+
 ## Expected Output
 
-Depending on configured domains, `prepare()` can write:
+Depending on configured domains, `build()` can write:
 
 ```text
 output/
@@ -149,23 +197,31 @@ output/
   qa_report.md
   spatial/
     dem_info.json
-    dem_projected.tif
   landuse/
     landuse_lookup.csv
     landuse_raster_codes.csv
-    landuse_swat.tif
   soil/
     usersoil.csv
     soil_raster_codes.csv
   weather/
-    ST001.pcp
-    ST001.tmp
+    StationA.pcp     # SWAT+ daily precipitation (year/doy rows)
+    StationA.tmp     # SWAT+ daily temperature
+    pcp.cli tmp.cli  # SWAT+ index files
     wgn.csv
     stations.csv
   observed/
     streamflow_ST001.csv
     streamflow_meta.csv
 ```
+
+The **weather** format follows `project.targets`: `swatplus` (default) writes
+SWAT+ daily files plus `*.cli` indexes; `swat` writes SWAT Classic
+value-per-line `.pcp/.tmp`; listing both writes each format into its own
+`weather/swatplus/` and `weather/swat/` sub-directory. Output file names come
+from the station `name` column. See
+[`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) for the full reference,
+including the `file_pattern` input-naming option (default `{id}.csv`) and split
+precip/temp sources.
 
 Invalid input should be reported as QA failures. Writers skip domains with hard
 processor failures.

@@ -39,28 +39,37 @@ class WeatherWriter:
         out.mkdir(parents=True, exist_ok=True)
 
         written: list[Path] = []
-        stations = self.result.stations
         daily = self.result.daily
 
         precip_wide = daily.get("precip")
         tmax_wide = daily.get("tmax")
         tmin_wide = daily.get("tmin")
 
-        for sid, meta in stations.iterrows():
-            name = str(meta.get("name", sid))
-            lat = float(meta["lat"])
-            lon = float(meta["lon"])
-            elev = float(meta["elev"])
+        # Use per-group station lists when available, fall back to union
+        precip_stations = self.result.precip_stations if self.result.precip_stations is not None else self.result.stations
+        temp_stations = self.result.temp_stations if self.result.temp_stations is not None else self.result.stations
 
-            if precip_wide is not None and sid in precip_wide.columns:
-                p = out / f"{sid}.pcp"
+        # Write .pcp files for precip stations
+        if precip_wide is not None:
+            for sid, meta in precip_stations.iterrows():
+                if sid not in precip_wide.columns:
+                    continue
+                name = str(meta.get("name", sid))
+                lat, lon, elev = float(meta["lat"]), float(meta["lon"]), float(meta["elev"])
+                p = out / f"{name}.pcp"
                 _write_pcp(p, name, lat, lon, elev, precip_wide[sid])
                 written.append(p)
 
-            if tmax_wide is not None and sid in tmax_wide.columns:
+        # Write .tmp files for temperature stations
+        if tmax_wide is not None:
+            for sid, meta in temp_stations.iterrows():
+                if sid not in tmax_wide.columns:
+                    continue
+                name = str(meta.get("name", sid))
+                lat, lon, elev = float(meta["lat"]), float(meta["lon"]), float(meta["elev"])
                 tx = tmax_wide[sid]
                 tn = tmin_wide[sid] if (tmin_wide is not None and sid in tmin_wide.columns) else None
-                t = out / f"{sid}.tmp"
+                t = out / f"{name}.tmp"
                 _write_tmp(t, name, lat, lon, elev, tx, tn)
                 written.append(t)
 
@@ -70,10 +79,19 @@ class WeatherWriter:
             self.result.wgn_stats.to_csv(wgn_path, index=False)
             written.append(wgn_path)
 
-        # Station list for SWAT Classic pcp.pcp / tmp.tmp master files
+        # Station lists — separate for precip and temperature if split
+        all_stations = self.result.stations
         sta_path = out / "stations.csv"
-        stations.reset_index().to_csv(sta_path, index=False)
+        all_stations.reset_index().to_csv(sta_path, index=False)
         written.append(sta_path)
+
+        if self.result.precip_stations is not None and self.result.temp_stations is not None:
+            pcp_sta = out / "precip_stations.csv"
+            self.result.precip_stations.reset_index().to_csv(pcp_sta, index=False)
+            written.append(pcp_sta)
+            tmp_sta = out / "temp_stations.csv"
+            self.result.temp_stations.reset_index().to_csv(tmp_sta, index=False)
+            written.append(tmp_sta)
 
         return written
 

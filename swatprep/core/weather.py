@@ -8,65 +8,222 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-import numpy as np
 import pandas as pd
 
 from ..config import WeatherConfig
 from ..errors import InputValidationError
 from ..qa import QACheck
+from ._wgn import (
+    _MISSING,
+    fill_temp_stats as _fill_temp_stats,
+    fill_precip_stats as _fill_precip_stats,
+    fill_climate_stats as _fill_climate_stats,
+)
 
 _REQUIRED_STATION_COLS = {"id", "name", "lat", "lon", "elev"}
 _WET_THRESHOLD = 0.1  # mm; day is "wet" if precip >= this value
-_MISSING = -99.0      # SWAT sentinel for unavailable parameters
 
 
 @dataclass
 class WeatherResult:
     """Output of WeatherPreprocessor.run()."""
 
-    stations: pd.DataFrame          # id(index), name, lat, lon, elev
+    stations: pd.DataFrame          # id(index), name, lat, lon, elev (union of all)
+    precip_stations: pd.DataFrame | None  # precip-specific station list
+    temp_stations: pd.DataFrame | None    # temperature-specific station list
     daily: dict[str, pd.DataFrame]  # {variable: wide_df} — DatetimeIndex × station_id
     wgn_stats: pd.DataFrame         # station_id, month, TMPMX, TMPMN, …
     qa: list[QACheck] = field(default_factory=list)
 
 
 class WeatherPreprocessor:
-    """Load, validate, and compute WGN monthly statistics from station CSVs."""
+    """Load, validate, and compute WGN monthly statistics from station CSVs.
+
+    Supports two modes:
+    - **Unified**: single ``stations`` + ``data_dir`` for all variables
+      (every station CSV must contain all configured variables).
+    - **Split**: separate ``precip`` and ``temperature`` sub-configs, each
+      with its own ``stations`` + ``data_dir``.  Precip CSVs only need a
+      ``precip`` column; temperature CSVs only need ``tmax``/``tmin``.
+    """
 
     def __init__(self, cfg: WeatherConfig) -> None:
         self.cfg = cfg
 
+    # convenience: is the config using split sources?
+    @property
+    def _is_split(self) -> bool:
+        return self.cfg.precip is not None or self.cfg.temp is not None
+
     def run(self) -> WeatherResult:
         qa: list[QACheck] = []
-        stations = self._load_stations(qa)
-        daily = self._load_daily(stations, qa)
-        wgn = self._compute_wgn(stations, daily, qa)
-        return WeatherResult(stations=stations, daily=daily, wgn_stats=wgn, qa=qa)
+
+        if self._is_split:
+            precip_stations, temp_stations, daily = self._load_split(qa)
+            # Union of all stations for writer's station list
+            frames = [df for df in (precip_stations, temp_stations) if df is not None]
+            all_stations = pd.concat(frames)
+            all_stations = all_stations[~all_stations.index.duplicated(keep="first")]
+        else:
+            all_stations = self._load_stations(self.cfg.stations, qa)
+            daily = self._load_daily_unified(all_stations, qa)
+            precip_stations = all_stations
+            temp_stations = all_stations
+
+        wgn = self._compute_wgn(all_stations, daily, qa)
+        return WeatherResult(
+            stations=all_stations,
+            precip_stations=precip_stations,
+            temp_stations=temp_stations,
+            daily=daily,
+            wgn_stats=wgn,
+            qa=qa,
+        )
 
     # ------------------------------------------------------------------
     # Station metadata
     # ------------------------------------------------------------------
 
-    def _load_stations(self, qa: list[QACheck]) -> pd.DataFrame:
-        path = self.cfg.stations
+    def _load_stations(
+        self, path: Path, qa: list[QACheck], label: str = "",
+    ) -> pd.DataFrame:
+        tag = f" ({label})" if label else ""
         df = pd.read_csv(path, dtype={"id": str})
         missing_cols = _REQUIRED_STATION_COLS - set(df.columns)
         if missing_cols:
             raise InputValidationError(
-                f"stations.csv missing required columns: {', '.join(sorted(missing_cols))}"
+                f"stations.csv{tag} missing required columns: "
+                f"{', '.join(sorted(missing_cols))}"
             )
         qa.append(QACheck(
-            name="stations_loaded",
+            name=f"stations_loaded{('_' + label) if label else ''}",
             status="pass",
-            message=f"{len(df)} station(s) loaded from {path.name}",
+            message=f"{len(df)} station(s) loaded from {path.name}{tag}",
         ))
         return df.set_index("id")
 
     # ------------------------------------------------------------------
-    # Daily time series
+    # Split-source loading (separate precip / temperature)
     # ------------------------------------------------------------------
 
-    def _load_daily(
+    def _load_split(
+        self, qa: list[QACheck],
+    ) -> tuple[pd.DataFrame | None, pd.DataFrame | None, dict[str, pd.DataFrame]]:
+        cfg = self.cfg
+        full_range = pd.date_range(cfg.start, cfg.end, freq="D")
+        daily: dict[str, pd.DataFrame] = {}
+        precip_stations: pd.DataFrame | None = None
+        temp_stations: pd.DataFrame | None = None
+
+        precip_vars = [v for v in cfg.variables if v == "precip"]
+        temp_vars = [v for v in cfg.variables if v in ("tmax", "tmin")]
+
+        # --- precip ---
+        if precip_vars:
+            p_sta_path, p_data_dir = cfg.precip_source()
+            p_pattern = cfg.precip.file_pattern if cfg.precip is not None else cfg.file_pattern
+            precip_stations = self._load_stations(p_sta_path, qa, label="precip")
+            p_daily = self._load_daily_group(
+                precip_stations, p_data_dir, precip_vars, full_range, qa,
+                label="precip", file_pattern=p_pattern,
+            )
+            daily.update(p_daily)
+
+        # --- temperature ---
+        if temp_vars:
+            t_sta_path, t_data_dir = cfg.temp_source()
+            t_pattern = cfg.temp.file_pattern if cfg.temp is not None else cfg.file_pattern
+            temp_stations = self._load_stations(t_sta_path, qa, label="temperature")
+            t_daily = self._load_daily_group(
+                temp_stations, t_data_dir, temp_vars, full_range, qa,
+                label="temperature", file_pattern=t_pattern,
+            )
+            daily.update(t_daily)
+
+        return precip_stations, temp_stations, daily
+
+    def _load_daily_group(
+        self,
+        stations: pd.DataFrame,
+        data_dir: Path,
+        variables: list[str],
+        full_range: pd.DatetimeIndex,
+        qa: list[QACheck],
+        label: str = "",
+        file_pattern: str = "{id}.csv",
+    ) -> dict[str, pd.DataFrame]:
+        """Load station CSVs for a specific variable group."""
+        cfg = self.cfg
+        per_station: dict[str, dict[str, pd.Series]] = {}
+
+        for sid in stations.index:
+            # Resolve file_pattern: {id} → station id, {name} → station name
+            fname = file_pattern.format(id=sid, name=stations.loc[sid, "name"])
+            fpath = data_dir / fname
+            if not fpath.exists():
+                qa.append(QACheck(
+                    name=f"data_file:{label}:{sid}" if label else f"data_file:{sid}",
+                    status="fail",
+                    message=f"Missing data file: {fpath.name}",
+                    context={"station": sid, "path": str(fpath), "group": label},
+                ))
+                continue
+
+            df = pd.read_csv(fpath, parse_dates=["date"]).set_index("date").sort_index()
+
+            missing_vars = set(variables) - set(df.columns)
+            if missing_vars:
+                qa.append(QACheck(
+                    name=f"variables:{label}:{sid}" if label else f"variables:{sid}",
+                    status="fail",
+                    message=f"{sid}.csv missing columns: {', '.join(sorted(missing_vars))}",
+                ))
+                continue
+
+            df = df.reindex(full_range)
+
+            for var in variables:
+                missing_pct = df[var].isna().mean() * 100
+                if missing_pct > 0:
+                    status = "fail" if cfg.missing_policy == "fail" else "warn"
+                    qa.append(QACheck(
+                        name=f"missing:{sid}:{var}",
+                        status=status,
+                        message=f"{sid} {var}: {missing_pct:.1f}% missing in date range",
+                        context={"station": sid, "variable": var,
+                                 "missing_pct": round(missing_pct, 2)},
+                    ))
+
+            per_station[sid] = {var: df[var] for var in variables}
+
+        if not per_station:
+            raise InputValidationError(
+                f"No valid station data files found for {label or 'weather'}. "
+                f"Check data_dir and station IDs."
+            )
+
+        result: dict[str, pd.DataFrame] = {}
+        for var in variables:
+            result[var] = pd.DataFrame(
+                {sid: s[var] for sid, s in per_station.items() if var in s}
+            )
+
+        qa.append(QACheck(
+            name=f"daily_loaded{'_' + label if label else ''}",
+            status="pass",
+            message=(
+                f"Daily data loaded ({label}): {len(per_station)} station(s), "
+                f"variables: {', '.join(variables)}, "
+                f"{len(full_range)} days"
+            ),
+        ))
+        return result
+
+    # ------------------------------------------------------------------
+    # Unified loading (original single-source mode)
+    # ------------------------------------------------------------------
+
+    def _load_daily_unified(
         self, stations: pd.DataFrame, qa: list[QACheck]
     ) -> dict[str, pd.DataFrame]:
         """Load per-station CSVs; return wide DataFrames keyed by variable."""
@@ -75,7 +232,8 @@ class WeatherPreprocessor:
         per_station: dict[str, dict[str, pd.Series]] = {}
 
         for sid in stations.index:
-            fpath = cfg.data_dir / f"{sid}.csv"
+            fname = cfg.file_pattern.format(id=sid, name=stations.loc[sid, "name"])
+            fpath = cfg.data_dir / fname
             if not fpath.exists():
                 qa.append(QACheck(
                     name=f"data_file:{sid}",
@@ -152,8 +310,11 @@ class WeatherPreprocessor:
         Documentation, Chapter 1 (Climate).
         """
         precip_wide = daily.get("precip")
-        tmax_wide = daily.get("tmax")
-        tmin_wide = daily.get("tmin")
+        tmax_wide   = daily.get("tmax")
+        tmin_wide   = daily.get("tmin")
+        solar_wide  = daily.get("solar")
+        rhum_wide   = daily.get("humidity")
+        wind_wide   = daily.get("wind")
 
         station_ids = list(
             set(precip_wide.columns if precip_wide is not None else [])
@@ -162,14 +323,18 @@ class WeatherPreprocessor:
 
         rows = []
         for sid in station_ids:
-            p = precip_wide[sid] if (precip_wide is not None and sid in precip_wide) else None
-            tx = tmax_wide[sid] if (tmax_wide is not None and sid in tmax_wide) else None
-            tn = tmin_wide[sid] if (tmin_wide is not None and sid in tmin_wide) else None
+            p     = precip_wide[sid] if (precip_wide is not None and sid in precip_wide) else None
+            tx    = tmax_wide[sid]   if (tmax_wide   is not None and sid in tmax_wide)   else None
+            tn    = tmin_wide[sid]   if (tmin_wide   is not None and sid in tmin_wide)   else None
+            solar = solar_wide[sid]  if (solar_wide  is not None and sid in solar_wide)  else None
+            rhum  = rhum_wide[sid]   if (rhum_wide   is not None and sid in rhum_wide)   else None
+            wind  = wind_wide[sid]   if (wind_wide   is not None and sid in wind_wide)   else None
 
             for month in range(1, 13):
                 row: dict = {"station_id": sid, "month": month}
                 _fill_temp_stats(row, tx, tn, month)
                 _fill_precip_stats(row, p, month)
+                _fill_climate_stats(row, solar, rhum, wind, tx, tn, month)
                 rows.append(row)
 
         qa.append(QACheck(
@@ -178,63 +343,3 @@ class WeatherPreprocessor:
             message=f"WGN stats computed for {len(station_ids)} station(s) × 12 months",
         ))
         return pd.DataFrame(rows)
-
-
-# ---------------------------------------------------------------------------
-# Per-month statistics helpers
-# ---------------------------------------------------------------------------
-
-
-def _fill_temp_stats(row: dict, tmax, tmin, month: int) -> None:
-    for src, mx_key, std_key in [(tmax, "TMPMX", "TMPSTDMX"), (tmin, "TMPMN", "TMPSTDMN")]:
-        if src is not None:
-            m = src[src.index.month == month].dropna()
-            row[mx_key] = round(float(m.mean()), 2) if len(m) else _MISSING
-            row[std_key] = round(float(m.std()), 2) if len(m) > 1 else 0.0
-        else:
-            row[mx_key] = row[std_key] = _MISSING
-
-
-def _fill_precip_stats(row: dict, precip, month: int) -> None:
-    """Fill PCPMM, PCPSTD, PCPSKW, PR_W1, PR_W2, PCPD plus unavailable params."""
-    unavailable_keys = ("RAINHHMX", "SOLARAV", "DEWPT", "WNDAV")
-    for k in unavailable_keys:
-        row[k] = _MISSING
-
-    if precip is None:
-        for k in ("PCPMM", "PCPSTD", "PCPSKW", "PR_W1", "PR_W2", "PCPD"):
-            row[k] = _MISSING
-        return
-
-    p = precip[precip.index.month == month].dropna()
-    if len(p) == 0:
-        for k in ("PCPMM", "PCPSTD", "PCPSKW", "PR_W1", "PR_W2", "PCPD"):
-            row[k] = _MISSING
-        return
-
-    wet_mask = p >= _WET_THRESHOLD
-    wet_vals = p[wet_mask]
-
-    # Approximate mean monthly total from available data
-    n_years = max(1.0, len(p) / 30.44)
-    row["PCPMM"] = round(float(p.sum() / n_years), 2)
-    row["PCPSTD"] = round(float(wet_vals.std()), 2) if len(wet_vals) > 1 else 0.0
-    row["PCPSKW"] = round(float(wet_vals.skew()), 2) if len(wet_vals) > 2 else 0.0
-
-    pr_w1, pr_w2 = _markov_probs(wet_mask)
-    row["PR_W1"] = round(pr_w1, 4)
-    row["PR_W2"] = round(pr_w2, 4)
-    row["PCPD"] = round(float(wet_mask.sum() / n_years), 1)
-
-
-def _markov_probs(wet: pd.Series) -> tuple[float, float]:
-    """Return P(wet|dry) and P(wet|wet) from a boolean Series."""
-    if len(wet) < 2:
-        return 0.0, 0.0
-    prev = wet.values[:-1]
-    curr = wet.values[1:]
-    dry_prev = ~prev
-    wet_prev = prev
-    pr_w1 = float(curr[dry_prev].mean()) if dry_prev.sum() > 0 else 0.0
-    pr_w2 = float(curr[wet_prev].mean()) if wet_prev.sum() > 0 else 0.0
-    return pr_w1, pr_w2

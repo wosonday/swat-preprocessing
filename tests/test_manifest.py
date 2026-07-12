@@ -81,7 +81,7 @@ def test_qa_report_contains_all_statuses(tmp_dir):
 
 
 # ---------------------------------------------------------------------------
-# End-to-end: prepare() with weather + streamflow writes manifest
+# End-to-end: build() with weather + streamflow writes manifest
 # ---------------------------------------------------------------------------
 
 
@@ -115,7 +115,7 @@ def test_prepare_writes_manifest_and_report(
         encoding="utf-8",
     )
 
-    result = SWATPrepProject.from_config(config_path).prepare()
+    result = SWATPrepProject.from_config(config_path).build()
 
     assert result.success
     assert result.manifest_path is not None
@@ -139,6 +139,6 @@ def test_prepare_no_domains_no_manifest(tmp_dir):
             "output_dir": str(output_dir),
         }
     })
-    result = SWATPrepProject(cfg).prepare()
+    result = SWATPrepProject(cfg).build()
     assert result.manifest_path is None
     assert not output_dir.exists()

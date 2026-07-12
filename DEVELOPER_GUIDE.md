@@ -16,6 +16,7 @@
 6. [QA System](#6-qa-system)
 7. [Processors (Core Layer)](#7-processors-core-layer)
 8. [Writers (Output Layer)](#8-writers-output-layer)
+8b. [Converters Layer (Raw Data Pre-processing)](#8b-converters-layer-raw-data-pre-processing)
 9. [Output Package Structure](#9-output-package-structure)
 10. [Error Handling](#10-error-handling)
 11. [Extending the Library](#11-extending-the-library)
@@ -30,8 +31,8 @@
 ┌───────────────────────────────────────────────────────────────────────┐
 │                           User Interface                              │
 │                                                                       │
-│   CLI (swatprep validate / prepare / inspect)                         │
-│   Python API (SWATPrepProject.prepare())                              │
+│   CLI (swatprep validate / build / inspect)                         │
+│   Python API (SWATPrepProject.build())                              │
 └──────────────────────┬────────────────────────────────────────────────┘
                        │
                        ▼
@@ -45,7 +46,7 @@
                        ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │                         api.py — Orchestrator                        │
-│   SWATPrepProject.prepare()                                           │
+│   SWATPrepProject.build()                                           │
 │                                                                       │
 │   for each configured domain:                                         │
 │     1. Run Processor  →  Result dataclass + list[QACheck]             │
@@ -82,15 +83,25 @@ WeatherPreprocessor.run()
     └── _compute_wgn()    →  pd.DataFrame (12 rows × n_stations)
     │
     ▼
-WeatherResult(stations, daily, wgn_stats, qa=[...])
+WeatherResult(stations, precip_stations, temp_stations, daily, wgn_stats, qa=[...])
     │
     ▼  (only if failures(qa) == [])
-WeatherWriter.write()
-    ├── {sid}.pcp  — SWAT Classic precipitation file
-    ├── {sid}.tmp  — SWAT Classic temperature file
-    ├── wgn.csv    — weather generator parameters
-    └── stations.csv
+Writer chosen by project.targets:
+    ├── "swatplus" → SWATPlusWeatherWriter.write()
+    │       ├── {name}.pcp/.tmp/.hmd/.slr/.wnd  — SWAT+ daily files (year/doy rows)
+    │       ├── pcp.cli / tmp.cli / ...         — SWAT+ index files
+    │       ├── wgn.csv
+    │       └── stations.csv
+    └── "swat"     → WeatherWriter.write()
+            ├── {name}.pcp  — SWAT Classic precipitation file
+            ├── {name}.tmp  — SWAT Classic temperature file
+            ├── wgn.csv
+            └── stations.csv
 ```
+
+> Weather output format depends on `project.targets`. See
+> [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) for the full format
+> reference, split precip/temp sources, and `file_pattern`.
 
 ### Nguyên tắc thiết kế
 
@@ -149,7 +160,7 @@ swat-preprocessing/
 ├── swatprep/
 │   ├── __init__.py         # public exports: SWATPrepProject, SWATPrepConfig, QACheck
 │   ├── api.py              # SWATPrepProject, PrepareResult (orchestrator)
-│   ├── cli.py              # Click CLI: validate / prepare / inspect
+│   ├── cli.py              # Click CLI: validate / build / inspect
 │   ├── config.py           # Pydantic v2 schema cho YAML config
 │   ├── errors.py           # Exception hierarchy
 │   ├── qa.py               # QACheck, failures(), warnings(), all_pass()
@@ -159,6 +170,12 @@ swat-preprocessing/
 │   │   ├── soil.py
 │   │   ├── weather.py
 │   │   └── streamflow.py
+│   ├── converters/         # Pre-processing layer (raw Vietnamese data → SWAT inputs)
+│   │   ├── __init__.py     # public exports for all converters
+│   │   ├── climate.py      # DayFilesConverter (merge .day files → per-station CSV)
+│   │   ├── swat2012.py     # PCPConverter + TmpConverter (.pcp/.tmp)
+│   │   ├── weather_plus.py # SWATPlusWeatherConverter (SWAT+ format)
+│   │   └── streamflow.py   # StreamflowConverter
 │   ├── writers/            # Writers (serialize to files)
 │   │   ├── spatial.py      # DEM → dem_info.json
 │   │   ├── landuse.py      # LandUse → CSV files
@@ -173,6 +190,9 @@ swat-preprocessing/
     ├── test_config.py
     ├── test_qa.py
     ├── test_api.py
+    ├── test_converters.py   # DayFilesConverter, StreamflowConverter, CLI
+    ├── test_pcp_converter.py  # PCPConverter (SWAT 2012)
+    ├── test_weather_plus.py   # SWATPlusWeatherConverter
     ├── test_weather.py
     ├── test_streamflow.py
     ├── test_landuse.py
@@ -300,12 +320,19 @@ code,swat_code,swat_name
 |---|---|---|---|
 | `stations` | Path | — | CSV metadata trạm (id, name, lat, lon, elev) |
 | `data_dir` | Path | — | Thư mục chứa file CSV theo ngày per trạm |
+| `file_pattern` | str | `"{id}.csv"` | Mẫu tên file input; `{id}` hoặc `{name}` |
+| `precip` | block | — | Nguồn riêng cho mưa (`stations`,`data_dir`,`file_pattern`) |
+| `temp` | block | — | Nguồn riêng cho nhiệt độ (`stations`,`data_dir`,`file_pattern`) |
 | `variables` | list | `["precip","tmax","tmin"]` | Biến cần xử lý |
 | `start` | date | — | Ngày bắt đầu (YYYY-MM-DD) |
 | `end` | date | — | Ngày kết thúc (YYYY-MM-DD) |
 | `missing_policy` | str | `"fail"` | `"fail"` hoặc `"warn"` khi có missing data |
 | `units.precip` | str | `"mm"` | Đơn vị lượng mưa |
 | `units.temperature` | str | `"degC"` | Đơn vị nhiệt độ |
+
+> Định dạng output (SWAT+ hay SWAT Classic) do `project.targets` quyết định.
+> Xem [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) để biết chi tiết
+> `file_pattern`, nguồn tách `precip`/`temp`, và cả hai định dạng file.
 
 **Định dạng `stations.csv`:**
 ```csv
@@ -366,20 +393,20 @@ Exit code: `0` nếu tất cả pass, `1` nếu có failure.
 
 ---
 
-### `swatprep prepare CONFIG [--only DOMAIN]`
+### `swatprep build CONFIG [--only DOMAIN]`
 
 Chạy toàn bộ pipeline và ghi output package.
 
 ```bash
 # Chạy tất cả domains đã cấu hình
-swatprep prepare config.yaml
+swatprep build config.yaml
 
 # Chỉ chạy một domain
-swatprep prepare config.yaml --only weather
-swatprep prepare config.yaml --only dem
-swatprep prepare config.yaml --only landuse
-swatprep prepare config.yaml --only soil
-swatprep prepare config.yaml --only streamflow
+swatprep build config.yaml --only weather
+swatprep build config.yaml --only dem
+swatprep build config.yaml --only landuse
+swatprep build config.yaml --only soil
+swatprep build config.yaml --only streamflow
 ```
 
 Ví dụ output:
@@ -438,12 +465,12 @@ cfg = SWATPrepConfig.from_yaml("config.yaml")
 project = SWATPrepProject(cfg)
 ```
 
-#### `SWATPrepProject.prepare(only=None) → PrepareResult`
+#### `SWATPrepProject.build(only=None) → PrepareResult`
 
 Chạy toàn bộ pipeline.
 
 ```python
-result = project.prepare()
+result = project.build()
 
 print(result.output_dir)      # Path
 print(result.manifest_path)   # Path | None
@@ -456,7 +483,7 @@ for check in result.qa_checks:
     print(f"{check.status:5s}  {check.name}: {check.message}")
 
 # Chỉ chạy một domain
-result = project.prepare(only="weather")
+result = project.build(only="weather")
 ```
 
 #### `SWATPrepProject.validate() → list[QACheck]`
@@ -493,7 +520,7 @@ class PrepareResult:
 
 ### Sử dụng trực tiếp các Processor
 
-Bạn có thể gọi từng processor riêng lẻ mà không qua `prepare()`:
+Bạn có thể gọi từng processor riêng lẻ mà không qua `build()`:
 
 ```python
 from pathlib import Path
@@ -877,7 +904,40 @@ written = SoilWriter(soil_result, output_dir / "soil").write()
 
 ---
 
-### WeatherWriter
+### Weather writers (chọn theo `project.targets`)
+
+`build()` chọn writer dựa trên `project.targets`:
+
+| `targets` | Writer | File |
+|---|---|---|
+| `"swatplus"` (mặc định) | `SWATPlusWeatherWriter` (`writers/weather_plus.py`) | `.pcp/.tmp/.hmd/.slr/.wnd` + `*.cli` |
+| `"swat"` | `WeatherWriter` (`writers/weather.py`) | SWAT Classic `.pcp/.tmp` |
+| cả hai | cả hai | mỗi định dạng vào thư mục con `swatplus/` và `swat/` |
+
+> Xem [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) cho tham chiếu đầy đủ.
+
+#### SWATPlusWeatherWriter (mặc định)
+
+**File:** `swatprep/writers/weather_plus.py` · **Output dir:** `output/weather/`
+
+```python
+from swatprep.writers.weather_plus import SWATPlusWeatherWriter
+
+written = SWATPlusWeatherWriter(weather_result, output_dir / "weather").write()
+```
+
+Mỗi file có header 3 dòng (`nbyr tstep lat lon elev`) + các dòng `year doy value`,
+kèm file chỉ mục `.cli`:
+
+```text
+StationA.pcp: Precipitation data - file written by swatprep 2026-07-12 22:12:49
+nbyr     tstep       lat       lon      elev
+   1         0    15.500   105.200   120.000
+2000    1    0.00000
+2000    2    5.20000
+```
+
+#### WeatherWriter (SWAT Classic)
 
 **File:** `swatprep/writers/weather.py`  
 **Output dir:** `output/weather/`
@@ -892,17 +952,20 @@ written = WeatherWriter(weather_result, output_dir / "weather").write()
 
 | File | Nội dung |
 |---|---|
-| `{station_id}.pcp` | SWAT Classic precipitation file |
-| `{station_id}.tmp` | SWAT Classic temperature file |
+| `{name}.pcp` | SWAT Classic precipitation file |
+| `{name}.tmp` | SWAT Classic temperature file |
 | `wgn.csv` | Weather Generator parameters (14 cols × n_stations × 12 tháng) |
 | `stations.csv` | Metadata trạm |
+
+> Tên file output lấy từ cột `name` của trạm. Trạm trùng tên sẽ được thêm hậu tố
+> `_{id}` để tránh ghi đè.
 
 **Định dạng SWAT Classic `.pcp`:**
 ```
 Precipitation data: StationA
-Lati     15.50
-Long    105.20
-Elev    120.00
+Lati      15.500
+Long     105.200
+Elev     120.000
 19991231
      0.000
      5.200
@@ -912,17 +975,17 @@ Elev    120.00
 **Định dạng SWAT Classic `.tmp`:**
 ```
 Temperature data: StationA
-Lati     15.50
-Long    105.20
-Elev    120.00
+Lati      15.500
+Long     105.200
+Elev     120.000
 19991231
     30.100    22.000
     29.500    20.000
 ```
 
-> Header gồm 4 dòng: title, Lati, Long, Elev.  
-> Dòng 5 là ngày **trước ngày đầu tiên có data** (YYYYMMDD).  
-> Mỗi giá trị chiếm 10 ký tự, 3 chữ số thập phân.
+> Header gồm 4 dòng: title, Lati, Long, Elev — mỗi giá trị `%12.3f` (3 chữ số thập phân).  
+> Dòng 5 là ngày đầu tiên có data (YYYYMMDD).  
+> Mỗi giá trị data chiếm 10 ký tự, 3 chữ số thập phân (`%10.3f`).
 
 ---
 
@@ -992,6 +1055,143 @@ manifest_path, report_path = write_manifest(
 
 ---
 
+## 8b. Converters Layer (Raw Data Pre-processing)
+
+The `converters/` package is a **separate pre-processing step** that runs
+*before* the main `build()` pipeline. It converts raw Vietnamese station data
+(`.day` files, master metadata CSVs) into the per-station CSV and SWAT 2012
+file formats that the pipeline can consume.
+
+Converters do **not** appear in `api.py` / `build()`. They are called
+standalone, either via CLI or Python API.
+
+---
+
+### DayFilesConverter
+
+**File:** `swatprep/converters/climate.py`
+
+Merges multiple `.day` variable files into one per-station CSV.
+
+```python
+from swatprep.converters import DayFilesConverter
+
+result = DayFilesConverter(
+    data_dir=Path("raw/"),       # contains R_ANKHE.day, Tx_ANKHE.day, Tm_ANKHE.day
+    out_dir=Path("merged/"),
+).convert()
+
+print(result.stations_found)    # ["ANKHE", "BATO", ...]
+print(result.files_written)     # [Path("merged/ANKHE.csv"), ...]
+```
+
+---
+
+### PCPConverter and TmpConverter
+
+**File:** `swatprep/converters/swat2012.py`
+
+Both converters share a common base class (`_BaseStationConverter`) and are
+merged into one module. They read a master CSV for station metadata and write
+SWAT 2012 `.pcp` / `.tmp` files.
+
+**Shared base class** handles:
+- `convert()` loop iterating over master rows
+- `_find_raw_file()` — case-insensitive file discovery
+- `_is_swat_format()` — auto-detects YYYYMMDD header vs CSV format
+- `_read_master()` — validates required columns
+- `_swat_header()` — generates 4-line header (name, Lati, Long, Elev)
+
+**PCPConverter-specific:** reads single precipitation column, writes `%10.3f` per line.
+
+**TmpConverter-specific:** reads tmax + tmin columns (respects `tmin_first`), writes `%10.3f%10.3f` per line.
+
+```python
+from swatprep.converters import PCPConverter, TmpConverter
+
+# Precipitation
+pcp = PCPConverter(
+    master_path=Path("master_pcp.txt"),
+    data_dir=Path("raw/"),
+    out_dir=Path("swat_pcp/"),
+).convert()
+
+print(pcp.files_written)   # [Path("swat_pcp/pcp_ANKHE.pcp"), ...]
+print(pcp.unmatched)       # stations in master with no matching raw file
+
+# Temperature
+tmp = TmpConverter(
+    master_path=Path("master_tmp.txt"),
+    data_dir=Path("raw_tmp/"),
+    out_dir=Path("swat_tmp/"),
+    tmin_first=True,       # SWAT Classic input has tmin before tmax
+).convert()
+```
+
+**Result types** (unified — same for both converters):
+
+```python
+@dataclass
+class StationResult:
+    name: str; station: str; lat: float; lon: float; elev: float
+    out_path: Path | None; n_days: int; qa: list[QACheck]
+
+@dataclass
+class SWAT2012ConvertResult:
+    stations: list[StationResult]
+    files_written: list[Path]
+    unmatched: list[str]
+    qa: list[QACheck]
+```
+
+**Output format — `.pcp` file:**
+```
+pcp_ANKHE
+Lati      13.950
+Long     108.650
+Elev     416.000
+19770101
+     0.000
+     5.500
+```
+
+**Output format — `.tmp` file:**
+```
+tmp_ANKHE
+Lati      13.950
+Long     108.650
+Elev     416.000
+19770101
+    25.000    18.000
+```
+
+> Header fields use `%12.3f` (3 decimal places). Data values use `%10.3f`.
+
+---
+
+### SWATPlusWeatherConverter
+
+**File:** `swatprep/converters/weather_plus.py`
+
+Converts per-station CSVs (from `DayFilesConverter`) into SWAT+ weather files.
+Uses vectorized numpy for data line formatting (no `iterrows()`).
+
+```python
+from swatprep.converters import SWATPlusWeatherConverter
+
+result = SWATPlusWeatherConverter(
+    data_dir=Path("merged/"),
+    out_dir=Path("swatplus/"),
+    metadata=Path("master_pcp.txt"),
+).convert()
+```
+
+**Output:** `ankhe.pcp`, `ankhe.tmp`, `pcp.cli`, `tmp.cli`
+
+> Note: SWAT+ temperature files use `.tmp` extension (not `.tem`).
+
+---
+
 ## 9. Output Package Structure
 
 Sau khi chạy `prepare`, output directory có cấu trúc:
@@ -1051,7 +1251,7 @@ SWATPrepError                    # Base class
 from swatprep.errors import SWATPrepError, ConfigError, InputValidationError
 
 try:
-    result = project.prepare()
+    result = project.build()
 except ConfigError as e:
     print(f"Config lỗi: {e}")
 except InputValidationError as e:
@@ -1268,7 +1468,7 @@ swatprep validate config.yaml
 ### 4. Chạy pipeline đầy đủ
 
 ```bash
-swatprep prepare config.yaml
+swatprep build config.yaml
 # Done  -> /project/output
 # Manifest -> /project/output/manifest.json
 ```
@@ -1306,7 +1506,7 @@ print(flow.describe())
 
 ```bash
 # Sau khi sửa dữ liệu weather
-swatprep prepare config.yaml --only weather
+swatprep build config.yaml --only weather
 ```
 
 ### 8. Sử dụng Python API cho scripting nâng cao
@@ -1323,7 +1523,7 @@ if failures(checks):
     raise SystemExit("Input files missing — run 'swatprep validate' for details")
 
 # Chạy pipeline
-result = project.prepare()
+result = project.build()
 
 # Xử lý kết quả
 if not result.success:

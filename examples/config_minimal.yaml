@@ -3,7 +3,7 @@
 #
 # Usage:
 #   swatprep validate examples/config_minimal.yaml
-#   swatprep prepare examples/config_minimal.yaml
+#   swatprep build examples/config_minimal.yaml
 
 project:
   name: "ExampleBasin_2024"

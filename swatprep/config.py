@@ -57,9 +57,19 @@ class WeatherUnitsConfig(BaseModel):
     temperature: str = "degC"
 
 
-class WeatherConfig(BaseModel):
+class WeatherSourceConfig(BaseModel):
+    """Per-variable-group station source (optional override)."""
     stations: Path  # CSV: id, name, lat, lon, elev
-    data_dir: Path  # directory; one CSV per station named {id}.csv
+    data_dir: Path  # directory; one CSV per station
+    file_pattern: str = "{id}.csv"  # e.g. "{name}.csv" to match by station name
+
+
+class WeatherConfig(BaseModel):
+    stations: Optional[Path] = None   # CSV: id, name, lat, lon, elev (default for all)
+    data_dir: Optional[Path] = None   # directory; one CSV per station (default for all)
+    precip: Optional[WeatherSourceConfig] = None      # override for precip
+    temp: Optional[WeatherSourceConfig] = None         # override for tmax/tmin
+    file_pattern: str = "{id}.csv"  # e.g. "{name}.csv" to match by station name
     format: Literal["csv"] = "csv"
     variables: list[
         Literal["precip", "tmax", "tmin", "wind", "solar", "humidity"]
@@ -74,6 +84,37 @@ class WeatherConfig(BaseModel):
         if self.end < self.start:
             raise ValueError("weather.end must be on or after weather.start")
         return self
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "WeatherConfig":
+        """Ensure at least one source is configured for each variable group."""
+        has_default = self.stations is not None and self.data_dir is not None
+        precip_vars = {"precip"} & set(self.variables)
+        temp_vars = {"tmax", "tmin"} & set(self.variables)
+
+        if precip_vars and not has_default and self.precip is None:
+            raise ValueError(
+                "Precip variables configured but no source: "
+                "set weather.stations/data_dir or weather.precip.stations/data_dir"
+            )
+        if temp_vars and not has_default and self.temp is None:
+            raise ValueError(
+                "Temperature variables configured but no source: "
+                "set weather.stations/data_dir or weather.temp.stations/data_dir"
+            )
+        return self
+
+    def precip_source(self) -> tuple[Path, Path]:
+        """Return (stations_path, data_dir) for precipitation."""
+        if self.precip is not None:
+            return self.precip.stations, self.precip.data_dir
+        return self.stations, self.data_dir  # type: ignore[return-value]
+
+    def temp_source(self) -> tuple[Path, Path]:
+        """Return (stations_path, data_dir) for temperature."""
+        if self.temp is not None:
+            return self.temp.stations, self.temp.data_dir
+        return self.stations, self.data_dir  # type: ignore[return-value]
 
 
 class StreamflowConfig(BaseModel):
@@ -139,3 +180,14 @@ class SWATPrepConfig(BaseModel):
             value: Optional[Path] = getattr(section, field_name)
             if value is not None and not value.is_absolute():
                 setattr(section, field_name, base_dir / value)
+
+        # Resolve sub-source paths for weather.precip / weather.temp
+        if self.weather is not None:
+            for sub_name in ("precip", "temp"):
+                sub = getattr(self.weather, sub_name)
+                if sub is None:
+                    continue
+                for field_name in ("stations", "data_dir"):
+                    value = getattr(sub, field_name)
+                    if value is not None and not value.is_absolute():
+                        setattr(sub, field_name, base_dir / value)

@@ -3,7 +3,7 @@
     from swatprep import SWATPrepProject
 
     project = SWATPrepProject.from_config("config.yaml")
-    result  = project.prepare()
+    result  = project.build()
 
     print(result.output_dir)
     print(result.warning_count)
@@ -52,7 +52,7 @@ class SWATPrepProject:
     def from_config(cls, path: str | Path) -> "SWATPrepProject":
         return cls(SWATPrepConfig.from_yaml(path))
 
-    def prepare(self, only: str | None = None) -> PrepareResult:
+    def build(self, only: str | None = None) -> PrepareResult:
         """Run the full preprocessing pipeline.
 
         Args:
@@ -105,12 +105,11 @@ class SWATPrepProject:
             domains_run.append("landuse")
 
             if not failures(result.qa):
-                lu_out = output_dir / "landuse"
-                written = LandUseWriter(result, lu_out).write()
+                written = LandUseWriter(result, output_dir).write()
                 all_qa.append(QACheck(
                     name="landuse_written",
                     status="pass",
-                    message=f"{len(written)} land-use file(s) written to {lu_out}",
+                    message=f"{len(written)} land-use file(s) written to {output_dir / 'landuse'}",
                 ))
 
         # ------------------------------------------------------------------ #
@@ -138,7 +137,6 @@ class SWATPrepProject:
         # ------------------------------------------------------------------ #
         if "weather" in domains_to_run and cfg.weather is not None:
             from .core.weather import WeatherPreprocessor
-            from .writers.weather import WeatherWriter
 
             result = WeatherPreprocessor(cfg.weather).run()
             all_qa.extend(result.qa)
@@ -146,11 +144,28 @@ class SWATPrepProject:
 
             if not failures(result.qa):
                 weather_out = output_dir / "weather"
-                written = WeatherWriter(result, weather_out).write()
+                targets = list(cfg.project.targets) or ["swatplus"]
+                # When both models are requested, keep each format in its own
+                # sub-directory so identically-named files don't collide.
+                multi = len({"swatplus", "swat"} & set(targets)) > 1
+
+                written: list[Path] = []
+                for target in targets:
+                    dest = weather_out / target if multi else weather_out
+                    if target == "swatplus":
+                        from .writers.weather_plus import SWATPlusWeatherWriter
+                        written += SWATPlusWeatherWriter(result, dest).write()
+                    elif target == "swat":
+                        from .writers.weather import WeatherWriter
+                        written += WeatherWriter(result, dest).write()
+
                 all_qa.append(QACheck(
                     name="weather_written",
                     status="pass",
-                    message=f"{len(written)} weather file(s) written to {weather_out}",
+                    message=(
+                        f"{len(written)} weather file(s) written to {weather_out} "
+                        f"(targets: {', '.join(targets)})"
+                    ),
                 ))
             else:
                 all_qa.append(QACheck(
@@ -219,8 +234,16 @@ class SWATPrepProject:
             _check_path(cfg.soil.raster, "soil.raster", checks)
             _check_path(cfg.soil.table, "soil.table", checks)
         if cfg.weather:
-            _check_path(cfg.weather.stations, "weather.stations", checks)
-            _check_path(cfg.weather.data_dir, "weather.data_dir", checks)
+            if cfg.weather.stations is not None:
+                _check_path(cfg.weather.stations, "weather.stations", checks)
+            if cfg.weather.data_dir is not None:
+                _check_path(cfg.weather.data_dir, "weather.data_dir", checks)
+            if cfg.weather.precip is not None:
+                _check_path(cfg.weather.precip.stations, "weather.precip.stations", checks)
+                _check_path(cfg.weather.precip.data_dir, "weather.precip.data_dir", checks)
+            if cfg.weather.temp is not None:
+                _check_path(cfg.weather.temp.stations, "weather.temp.stations", checks)
+                _check_path(cfg.weather.temp.data_dir, "weather.temp.data_dir", checks)
         if cfg.streamflow:
             _check_path(cfg.streamflow.path, "streamflow.path", checks)
 

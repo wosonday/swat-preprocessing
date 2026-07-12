@@ -59,33 +59,22 @@ output/
   manifest.json
   qa_report.md
   spatial/
-    dem_projected.tif
-    boundary.gpkg
-    landuse_swat.tif
+    dem_info.json
+  landuse/
     landuse_lookup.csv
-    soil_map_projected.tif
+    landuse_raster_codes.csv
+  soil/
     usersoil.csv
-  weather/
+    soil_raster_codes.csv
+  weather/                 # format follows project.targets (default: swatplus)
     stations.csv
-    pcp/
-      pcp1.pcp
-    tmp/
-      tmp1.tmp
+    StationA.pcp           # SWAT+ daily files (year/doy rows)
+    StationA.tmp
+    pcp.cli tmp.cli        # SWAT+ index files
     wgn.csv
   observed/
-    streamflow_daily.csv
-    reach_observed.csv
-  swatplus_import/
-    weather_file.cio
-    weather_sta.cli
-    pcp.cli
-    tmp.cli
-  swat_classic_import/
-    pcp.txt
-    tmp.txt
-    *.pcp
-    *.tmp
-    usersoil.csv
+    streamflow_ST001.csv
+    streamflow_meta.csv
 ```
 
 Exact file names may be refined during implementation, but the contract is stable: each writer produces files plus manifest entries that say what was written and how it was validated.
@@ -106,7 +95,7 @@ Exact file names may be refined during implementation, but the contract is stabl
 | F8 | Compute weather generator monthly statistics from available daily station data |
 | F9 | Accept observed streamflow CSV; normalize dates/units and write calibration-ready daily observation files |
 | F10 | Produce `manifest.json` and `qa_report.md` for reproducibility and review |
-| F11 | Provide `swatprep validate`, `swatprep prepare`, and `swatprep inspect` CLI commands |
+| F11 | Provide `swatprep validate`, `swatprep build`, and `swatprep inspect` CLI commands |
 
 ---
 
@@ -115,6 +104,19 @@ Exact file names may be refined during implementation, but the contract is stabl
 ### 5.1 Component Diagram
 
 ```
+Raw Vietnamese .day files
+    |
+    v
+converters/                          ← optional pre-processing layer
+    DayFilesConverter                    merge .day → per-station CSV
+    PCPConverter  ─┐
+                   ├─ swat2012.py    write SWAT 2012 .pcp / .tmp
+    TmpConverter  ─┘
+    SWATPlusWeatherConverter         write SWAT+ precipitation/temperature files
+    StreamflowConverter              reshape streamflow CSVs
+    |
+    v (per-station CSV / validated inputs)
+
 config.yaml
     |
     v
@@ -136,11 +138,20 @@ SWATPrepProject
     |
     +-- Writers
           +-- SpatialPackageWriter
-          +-- WeatherWriter
+          +-- SWATPlusWeatherWriter   (targets: swatplus, default)
+          +-- WeatherWriter           (targets: swat, SWAT Classic)
           +-- SoilWriter
           +-- ObservationWriter
           +-- ManifestWriter
 ```
+
+Weather output format is selected by `project.targets`; see
+[`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md).
+
+The `converters/` layer runs independently of `build()`. It is a one-time
+pre-processing step that converts raw Vietnamese station data into formats that
+the pipeline's preprocessors can consume. Each converter returns a
+`SWAT2012ConvertResult` (or similar) with `qa: list[QACheck]`.
 
 ### 5.2 Data Flow
 
@@ -179,7 +190,7 @@ All processors return typed result objects. Writers do not repeat processing; th
 from swatprep import SWATPrepProject
 
 project = SWATPrepProject.from_config("config.yaml")
-result = project.prepare()
+result = project.build()
 
 print(result.output_dir)
 print(result.manifest_path)
@@ -207,11 +218,11 @@ Partial APIs are included so users can test one data type without running the fu
 swatprep validate config.yaml
 
 # Prepare all configured inputs
-swatprep prepare config.yaml
+swatprep build config.yaml
 
 # Prepare one domain for debugging
-swatprep prepare config.yaml --only weather
-swatprep prepare config.yaml --only landuse
+swatprep build config.yaml --only weather
+swatprep build config.yaml --only landuse
 
 # Inspect one input file
 swatprep inspect raster data/dem.tif
@@ -305,7 +316,6 @@ class WeatherResult:
     stations: pd.DataFrame
     daily: dict[str, pd.DataFrame]
     wgn_stats: pd.DataFrame
-    missing_summary: pd.DataFrame
     qa: list[QACheck]
 
 @dataclass
@@ -349,6 +359,12 @@ swat-preprocessing/
       soil.py
       weather.py
       streamflow.py
+    converters/                      ← pre-processing layer (independent of build())
+      __init__.py
+      climate.py                     ← DayFilesConverter (merge .day files → CSV)
+      swat2012.py                    ← PCPConverter + TmpConverter (.pcp/.tmp files)
+      weather_plus.py                ← SWATPlusWeatherConverter (SWAT+ format)
+      streamflow.py                  ← StreamflowConverter
     writers/
       __init__.py
       manifest.py
@@ -369,10 +385,15 @@ swat-preprocessing/
     test_soil.py
     test_weather.py
     test_streamflow.py
+    test_converters.py
+    test_pcp_converter.py
+    test_weather_plus.py
     test_writers.py
   examples/
     config_minimal.yaml
   SYSTEM_DESIGN.md
+  DEVELOPER_GUIDE.md
+  TESTING_GUIDE.md
   pyproject.toml
 ```
 
@@ -450,7 +471,7 @@ Use small synthetic fixtures. Avoid real basin datasets in unit tests.
 | Weather | Date range is continuous; station IDs match metadata; WGN has 12 rows per station |
 | Streamflow | Dates parse as daily series; units are preserved or converted explicitly |
 | Writers | Expected files exist; manifest lists every output; QA failures block writing |
-| End-to-end | `swatprep prepare examples/config_minimal.yaml` exits 0 with synthetic data |
+| End-to-end | `swatprep build examples/config_minimal.yaml` exits 0 with synthetic data |
 
 Hydrologic model performance metrics such as NSE, KGE, and PBIAS are not part of preprocessing tests. They belong to later calibration/validation workflows after SWAT/SWAT+ simulation.
 

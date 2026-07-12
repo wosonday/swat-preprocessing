@@ -72,7 +72,6 @@ def test_daily_shape_matches_date_range(weather_stations_csv, weather_data_dir):
 
 
 def test_missing_data_file_produces_fail_qa(weather_stations_csv, tmp_dir):
-    # data_dir exists but no files inside
     empty_dir = tmp_dir / "empty"
     empty_dir.mkdir()
     cfg = _make_cfg(weather_stations_csv, empty_dir)
@@ -81,10 +80,8 @@ def test_missing_data_file_produces_fail_qa(weather_stations_csv, tmp_dir):
 
 
 def test_missing_policy_fail_triggers_fail_check(weather_stations_csv, tmp_dir):
-    """If a station has NaN after reindex and policy=fail, a fail QA check is emitted."""
     data_dir = tmp_dir / "data"
     data_dir.mkdir()
-    # Only 5 days of data, config asks for 10 → gap → missing
     dates = pd.date_range("2000-01-01", periods=5, freq="D")
     df = pd.DataFrame({
         "date": dates.strftime("%Y-%m-%d"),
@@ -94,7 +91,6 @@ def test_missing_policy_fail_triggers_fail_check(weather_stations_csv, tmp_dir):
     })
     df.to_csv(data_dir / "ST001.csv", index=False)
     df.to_csv(data_dir / "ST002.csv", index=False)
-
     cfg = _make_cfg(weather_stations_csv, data_dir, missing_policy="fail")
     result = WeatherPreprocessor(cfg).run()
     fail_checks = failures(result.qa)
@@ -102,7 +98,6 @@ def test_missing_policy_fail_triggers_fail_check(weather_stations_csv, tmp_dir):
 
 
 def test_missing_policy_warn_allows_success(weather_stations_csv, tmp_dir):
-    """Same gap, but policy=warn → no fail QA checks."""
     data_dir = tmp_dir / "data"
     data_dir.mkdir()
     dates = pd.date_range("2000-01-01", periods=5, freq="D")
@@ -114,7 +109,6 @@ def test_missing_policy_warn_allows_success(weather_stations_csv, tmp_dir):
     })
     df.to_csv(data_dir / "ST001.csv", index=False)
     df.to_csv(data_dir / "ST002.csv", index=False)
-
     cfg = _make_cfg(weather_stations_csv, data_dir, missing_policy="warn")
     result = WeatherPreprocessor(cfg).run()
     fail_checks = failures(result.qa)
@@ -148,7 +142,7 @@ def test_wgn_unavailable_params_are_minus99(weather_stations_csv, weather_data_d
     result = WeatherPreprocessor(cfg).run()
     wgn = result.wgn_stats
     for col in ("RAINHHMX", "SOLARAV", "DEWPT", "WNDAV"):
-        assert (wgn[col] == -99.0).all(), f"{col} should be -99 (not computed from daily data)"
+        assert (wgn[col] == -99.0).all()
 
 
 # ---------------------------------------------------------------------------
@@ -158,49 +152,159 @@ def test_wgn_unavailable_params_are_minus99(weather_stations_csv, weather_data_d
 
 def test_weather_writer_creates_pcp_and_tmp(weather_stations_csv, weather_data_dir, tmp_dir):
     from swatprep.writers.weather import WeatherWriter
-
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
-
     out = tmp_dir / "weather_out"
     written = WeatherWriter(result, out).write()
-
     paths = [p.name for p in written]
-    assert "ST001.pcp" in paths
-    assert "ST002.pcp" in paths
-    assert "ST001.tmp" in paths
-    assert "ST002.tmp" in paths
+    assert "StationA.pcp" in paths
+    assert "StationB.pcp" in paths
+    assert "StationA.tmp" in paths
+    assert "StationB.tmp" in paths
     assert "wgn.csv" in paths
 
 
 def test_pcp_file_format(weather_stations_csv, weather_data_dir, tmp_dir):
     from swatprep.writers.weather import WeatherWriter
-
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
-
     out = tmp_dir / "weather_out"
     WeatherWriter(result, out).write()
-
-    pcp = (out / "ST001.pcp").read_text(encoding="utf-8").splitlines()
-    # Line 0: title, lines 1-3: Lati/Long/Elev, line 4: date, lines 5+: data
+    pcp = (out / "StationA.pcp").read_text(encoding="utf-8").splitlines()
     assert pcp[0].startswith("Precipitation data")
     assert pcp[1].startswith("Lati")
-    assert pcp[4] == "19991231"  # day before 2000-01-01
-    # Data lines: 10.3f format → 10 chars
+    assert pcp[4] == "19991231"
     assert len(pcp[5].strip()) > 0
 
 
 def test_tmp_file_has_two_values_per_line(weather_stations_csv, weather_data_dir, tmp_dir):
     from swatprep.writers.weather import WeatherWriter
-
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
-
     out = tmp_dir / "weather_out"
     WeatherWriter(result, out).write()
-
-    tmp_lines = (out / "ST001.tmp").read_text(encoding="utf-8").splitlines()
-    data_line = tmp_lines[5]  # first data line
-    # Two 10-char fields → 20 chars
+    tmp_lines = (out / "StationA.tmp").read_text(encoding="utf-8").splitlines()
+    data_line = tmp_lines[5]
     assert len(data_line) == 20
+
+
+# ---------------------------------------------------------------------------
+# Split-source mode (separate precip / temperature stations)
+# ---------------------------------------------------------------------------
+
+
+def test_split_source_loads_different_stations(tmp_dir):
+    import textwrap
+    from swatprep.config import WeatherSourceConfig
+    from swatprep.writers.weather import WeatherWriter
+
+    precip_sta = tmp_dir / "precip_stations.csv"
+    precip_sta.write_text(textwrap.dedent("""\
+        id,name,lat,lon,elev
+        P1,PrecipA,14.0,108.7,300
+        P2,PrecipB,13.4,108.5,200
+        P3,PrecipC,13.0,109.0,50
+    """), encoding="utf-8")
+    precip_dir = tmp_dir / "precip_data"
+    precip_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=10, freq="D")
+    for sid in ("P1", "P2", "P3"):
+        df = pd.DataFrame({"date": dates.strftime("%Y-%m-%d"), "precip": [1.0] * 10})
+        df.to_csv(precip_dir / f"{sid}.csv", index=False)
+
+    temp_sta = tmp_dir / "temp_stations.csv"
+    temp_sta.write_text(textwrap.dedent("""\
+        id,name,lat,lon,elev
+        T1,TempA,14.0,108.7,300
+    """), encoding="utf-8")
+    temp_dir = tmp_dir / "temp_data"
+    temp_dir.mkdir()
+    df = pd.DataFrame({
+        "date": dates.strftime("%Y-%m-%d"),
+        "tmax": [30.0] * 10,
+        "tmin": [20.0] * 10,
+    })
+    df.to_csv(temp_dir / "T1.csv", index=False)
+
+    cfg = WeatherConfig(
+        precip=WeatherSourceConfig(stations=precip_sta, data_dir=precip_dir),
+        temp=WeatherSourceConfig(stations=temp_sta, data_dir=temp_dir),
+        variables=["precip", "tmax", "tmin"],
+        start=date(2000, 1, 1),
+        end=date(2000, 1, 10),
+    )
+    result = WeatherPreprocessor(cfg).run()
+    assert set(result.daily["precip"].columns) == {"P1", "P2", "P3"}
+    assert set(result.daily["tmax"].columns) == {"T1"}
+    assert set(result.daily["tmin"].columns) == {"T1"}
+
+    out = tmp_dir / "weather_out"
+    written = WeatherWriter(result, out).write()
+    paths = [p.name for p in written]
+    assert "PrecipA.pcp" in paths
+    assert "TempA.tmp" in paths
+    assert "PrecipA.tmp" not in paths
+    assert "precip_stations.csv" in paths
+    assert "temp_stations.csv" in paths
+
+    from swatprep.qa import failures as _failures
+    assert not _failures(result.qa)
+
+
+def test_split_source_precip_only(tmp_dir):
+    from swatprep.config import WeatherSourceConfig
+
+    sta = tmp_dir / "stations.csv"
+    sta.write_text("id,name,lat,lon,elev\nS1,A,15,105,100\n", encoding="utf-8")
+    data_dir = tmp_dir / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=10, freq="D")
+    pd.DataFrame({"date": dates.strftime("%Y-%m-%d"), "precip": [2.0] * 10}).to_csv(
+        data_dir / "S1.csv", index=False
+    )
+    cfg = WeatherConfig(
+        precip=WeatherSourceConfig(stations=sta, data_dir=data_dir),
+        variables=["precip"],
+        start=date(2000, 1, 1),
+        end=date(2000, 1, 10),
+    )
+    result = WeatherPreprocessor(cfg).run()
+    assert "precip" in result.daily
+    assert result.temp_stations is None
+
+
+def test_file_pattern_by_name(tmp_dir):
+    """file_pattern='{name}.csv' matches files by station name, not id."""
+    import textwrap
+    from swatprep.config import WeatherSourceConfig
+
+    sta = tmp_dir / "stations.csv"
+    sta.write_text(textwrap.dedent("""\
+        id,name,lat,lon,elev
+        1,ANKHE,14,108.7,300
+        2,AYUNPA,13.4,108.5,200
+    """), encoding="utf-8")
+    data_dir = tmp_dir / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=10, freq="D")
+    for name in ("ANKHE", "AYUNPA"):
+        df = pd.DataFrame({
+            "date": dates.strftime("%Y-%m-%d"),
+            "precip": [1.0] * 10,
+            "tmax": [30.0] * 10,
+            "tmin": [20.0] * 10,
+        })
+        df.to_csv(data_dir / f"{name}.csv", index=False)
+
+    cfg = WeatherConfig(
+        stations=sta,
+        data_dir=data_dir,
+        file_pattern="{name}.csv",
+        variables=["precip", "tmax", "tmin"],
+        start=date(2000, 1, 1),
+        end=date(2000, 1, 10),
+    )
+    result = WeatherPreprocessor(cfg).run()
+    assert set(result.daily["precip"].columns) == {"1", "2"}
+    from swatprep.qa import failures as _failures
+    assert not _failures(result.qa)

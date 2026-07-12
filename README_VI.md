@@ -17,14 +17,18 @@ Phiên bản hiện tại: `0.1.0`
 - Schema cấu hình YAML bằng Pydantic
 - Resolve đường dẫn tương đối theo thư mục chứa file cấu hình
 - CLI validate cấu hình và đường dẫn dữ liệu
-- Orchestration `prepare()` cho các domain đã cấu hình
+- Orchestration `build()` cho các domain đã cấu hình
 - Validate metadata DEM
 - Validate lookup sử dụng đất và cross-check mã raster
 - Validate bảng soil và cross-check mã raster
 - Validate station/daily CSV khí tượng và tính thống kê WGN
+- Output khí tượng dạng **SWAT+** (mặc định) hoặc **SWAT Classic**, chọn qua
+  `project.targets`; hỗ trợ nguồn precip/temp tách riêng và `file_pattern` tuỳ chỉnh
 - Validate CSV dòng chảy quan trắc
 - Writer cho metadata không gian, lookup sử dụng đất, `usersoil.csv`, file thời
   tiết, dòng chảy quan trắc, `manifest.json` và `qa_report.md`
+- Bộ chuyển đổi dữ liệu thô (`swatprep convert …`) từ định dạng gốc sang CSV
+  swatprep hoặc file SWAT+/SWAT Classic
 - Unit test cho config, QA, processors, writers, behavior CLI/API và manifest
 
 Vẫn ngoài phạm vi:
@@ -67,14 +71,14 @@ swatprep validate examples/config_minimal.yaml
 Chạy toàn bộ domain đã cấu hình:
 
 ```bash
-swatprep prepare config.yaml
+swatprep build config.yaml
 ```
 
 Chạy một domain:
 
 ```bash
-swatprep prepare config.yaml --only weather
-swatprep prepare config.yaml --only streamflow
+swatprep build config.yaml --only weather
+swatprep build config.yaml --only streamflow
 ```
 
 Example đi kèm có dữ liệu synthetic và phải validate thành công.
@@ -91,6 +95,30 @@ Inspect raster:
 swatprep inspect raster path/to/dem.tif
 ```
 
+### Chuyển đổi dữ liệu thô
+
+Các converter độc lập chuyển định dạng gốc sang CSV swatprep hoặc trực tiếp
+sang file SWAT, không phụ thuộc pipeline `build`:
+
+```bash
+# Gộp file .day theo biến (R_/Tx_/Tm_) thành CSV theo trạm
+swatprep convert climate DATA_DIR OUT_DIR
+
+# Dòng chảy dạng wide hoặc per-station → CSV long-format
+swatprep convert streamflow SOURCE OUT_PATH
+
+# Mưa / nhiệt độ thô → SWAT 2012 (Classic) .pcp / .tmp
+swatprep convert pcp MASTER_PATH DATA_DIR OUT_DIR
+swatprep convert tmp MASTER_PATH DATA_DIR OUT_DIR
+
+# pcp + tmp (SWAT Classic) → file khí tượng SWAT+ (.pcp/.tmp + pcp.cli/tmp.cli)
+swatprep convert swatplus MASTER_PATH PCP_DIR TMP_DIR OUT_DIR
+```
+
+Dùng converter để *chuẩn bị* dữ liệu thô thành CSV theo trạm, rồi trỏ
+`weather.data_dir` vào đó và chạy `swatprep build`. Xem
+[`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md).
+
 ## Python API
 
 ```python
@@ -102,13 +130,13 @@ checks = project.validate()
 for check in checks:
     print(check.status, check.name, check.message)
 
-result = project.prepare()
+result = project.build()
 print(result.success)
 print(result.output_dir)
 print(result.manifest_path)
 ```
 
-`prepare()` ghi `manifest.json` và `qa_report.md` khi có ít nhất một domain được
+`build()` ghi `manifest.json` và `qa_report.md` khi có ít nhất một domain được
 xử lý.
 
 ## Cấu Hình
@@ -139,9 +167,27 @@ working directory của process.
 Ngày trong phần weather được validate theo định dạng ISO. `weather.end` phải lớn
 hơn hoặc bằng `weather.start`.
 
+Một section `weather` điển hình (định dạng output do `project.targets` ở trên
+quyết định):
+
+```yaml
+weather:
+  stations: "./data/weather_stations.csv"   # id, name, lat, lon, elev
+  data_dir: "./data/weather"                # mỗi trạm một CSV
+  file_pattern: "{id}.csv"                   # mặc định; dùng "{name}.csv" để khớp theo tên
+  variables: ["precip", "tmax", "tmin"]
+  start: "2000-01-01"
+  end:   "2000-12-31"
+  missing_policy: "warn"                     # "fail" | "warn"
+```
+
+Mưa và nhiệt độ có thể lấy từ hai mạng lưới trạm khác nhau qua sub-block
+`weather.precip` / `weather.temp` — xem
+[`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md).
+
 ## Output Dự Kiến
 
-Tùy domain được cấu hình, `prepare()` có thể ghi:
+Tùy domain được cấu hình, `build()` có thể ghi:
 
 ```text
 output/
@@ -149,23 +195,28 @@ output/
   qa_report.md
   spatial/
     dem_info.json
-    dem_projected.tif
   landuse/
     landuse_lookup.csv
     landuse_raster_codes.csv
-    landuse_swat.tif
   soil/
     usersoil.csv
     soil_raster_codes.csv
   weather/
-    ST001.pcp
-    ST001.tmp
+    StationA.pcp     # SWAT+ daily (dòng year/doy value)
+    StationA.tmp
+    pcp.cli tmp.cli  # file chỉ mục SWAT+
     wgn.csv
     stations.csv
   observed/
     streamflow_ST001.csv
     streamflow_meta.csv
 ```
+
+Định dạng **weather** theo `project.targets`: `swatplus` (mặc định) ghi file
+SWAT+ kèm `*.cli`; `swat` ghi SWAT Classic `.pcp/.tmp`; chọn cả hai thì mỗi
+định dạng vào thư mục con `weather/swatplus/` và `weather/swat/`. Tên file lấy
+từ cột `name`. Xem [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) để biết
+chi tiết `file_pattern` (mặc định `{id}.csv`) và nguồn tách precip/temp.
 
 Input không hợp lệ phải được báo thành QA failure. Writer bỏ qua domain có lỗi
 processor nghiêm trọng.

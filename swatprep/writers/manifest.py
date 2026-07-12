@@ -1,4 +1,4 @@
-"""ManifestWriter: produce manifest.json and qa_report.md after prepare().
+"""ManifestWriter: produce manifest.json and qa_report.md after build().
 
 manifest.json — machine-readable record of the output package:
   project, created_at, domains, output_dir, files, qa_summary
