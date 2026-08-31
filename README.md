@@ -108,12 +108,10 @@ swatprep convert climate DATA_DIR OUT_DIR
 # Wide or per-station streamflow → long-format CSV
 swatprep convert streamflow SOURCE OUT_PATH
 
-# Raw precipitation / temperature → SWAT 2012 (Classic) .pcp / .tmp
-swatprep convert pcp MASTER_PATH DATA_DIR OUT_DIR
-swatprep convert tmp MASTER_PATH DATA_DIR OUT_DIR
-
-# SWAT Classic pcp + tmp → SWAT+ weather files (.pcp/.tmp + pcp.cli/tmp.cli)
-swatprep convert swatplus MASTER_PATH PCP_DIR TMP_DIR OUT_DIR
+# Raw station files (SWAT Classic style or CSV) → SWAT2012 and/or SWAT+
+swatprep convert weather --pcp-master MASTER.txt --pcp-dir DATA_DIR \
+                         --tmp-master MASTER.txt --tmp-dir DATA_DIR \
+                         --target swat2012 --target swatplus OUT_DIR
 ```
 
 Use converters to *prepare* raw data into per-station CSVs, then point
