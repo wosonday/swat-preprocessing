@@ -165,31 +165,33 @@ statistics) and `stations.csv` are written for reference.
 
 ---
 
-## SWAT Classic output format
+## SWAT Classic (SWAT2012) output format
 
-One file per station per variable, with a 4-line header, a start-date line
-(the day **before** the first record), and one value per line:
+One file per station per variable, **no metadata header block** -- just a
+start-date line (the date of the **first** data record, not offset) followed
+by one row per day. Station metadata lives in a separate master file, not in
+each per-station file. This mirrors the real SWAT2012 vendor-data convention.
 
-**`StationA.pcp`**
+**`pcp_StationA.txt`**
 ```text
-Precipitation data: StationA
-Lati      15.500
-Long     105.200
-Elev     120.000
-19991231
-     0.000
-     5.200
+20000101
+0.0
+5.2
 ```
 
-**`StationA.tmp`** (tmax and tmin, `%10.3f` each)
+**`tmp_StationA.txt`** (`tmin,tmax` per line)
 ```text
-Temperature data: StationA
-Lati      15.500
-Long     105.200
-Elev     120.000
-19991231
-    32.500    22.000
-    28.300    20.500
+20000101
+22.0,32.5
+20.0,28.3
+```
+
+**`master_pcp.txt`** / **`master_tmp.txt`** (one row per station, uppercase
+columns, `NAME` carries the domain prefix):
+```text
+ID,NAME,LAT,LONG,ELEVATION
+1,pcp_StationA,15.5,105.2,120.0
+2,pcp_StationB,15.8,105.6,95.0
 ```
 
 ---
