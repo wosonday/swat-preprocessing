@@ -1,43 +1,42 @@
-# Minimal example config for swatprep
-# Demonstrates all supported sections. Remove sections you don't need.
+# Example config for swatprep (split precip/temp + SWAT+ output).
+# Replace the ./data/... paths with your own inputs.
 #
 # Usage:
-#   swatprep validate examples/config_minimal.yaml
-#   swatprep build examples/config_minimal.yaml
+#   swatprep validate config.yaml
+#   swatprep build config.yaml
 
 project:
-  name: "sBa_AnKhe_2026"
+  name: "ExampleBasin_2026"
   crs: "EPSG:32648"                  # UTM Zone 48N — change to your basin CRS
-  boundary: "/mnt/d/DATA_STORAGE/_data/1_catchmentFiles/boundary/BA_AnKhe.shp" # project boundary (GeoJSON)
-  output_dir: "/mnt/d/QSWAT+/AnKhe_rivBasin/data"
+  boundary: "./data/boundary.shp"    # project boundary
+  output_dir: "./output"
   targets:
     - "swatplus"                     # "swat" | "swatplus" | both
 
 dem:
-  path: "/mnt/d/DATA_STORAGE/_data/1_DEM/5.Nam_trung_bo/ba_ankhe/hdr.adf"
+  path: "./data/dem/hdr.adf"
   output_name: "dem_projected.tif"
 
 landuse:
-  raster: "/mnt/d/DATA_STORAGE/_data/2_LandUse/2000/5.Nam_trung_bo/luc2000crec_ba_ankhe/hdr.adf"
-  lookup: "/mnt/d/DATA_STORAGE/_data/2_LandUse/GS_landuse.csv"
-  # lookup columns (defaults shown)
+  raster: "./data/landuse/hdr.adf"
+  lookup: "./data/landuse_lookup.csv"
   source_code_col: "LANDUSE_ID"
   swat_code_col: "SWAT_CODE"
   swat_name_col: "SWAT_CODE"
 
 soil:
-  raster: "/mnt/d/DATA_STORAGE/_data/3_Soil/5.Nam_trung_bo/soil_ba_ankhe/hdr.adf"
-  table: "/mnt/d/DATA_STORAGE/_data/3_Soil/soil_merged.csv"
+  raster: "./data/soil/hdr.adf"
+  table: "./data/soil_merged.csv"
   soil_key_col: "SOIL_ID"
   output_usersoil: true
 
 weather:
   precip:
-    stations: /mnt/d/DATA_STORAGE/Input_data_ground_station/precip/master_pcp.txt
-    data_dir: /mnt/d/DATA_STORAGE/_data/_DataReview/climate_swatplus
+    stations: ./data/precip/master_pcp.txt
+    data_dir: ./data/climate
   temp:
-    stations: /mnt/d/DATA_STORAGE/Input_data_ground_station/temp/tmp.txt
-    data_dir: /mnt/d/DATA_STORAGE/_data/_DataReview/climate_swatplus
+    stations: ./data/temp/tmp.txt
+    data_dir: ./data/climate
   format: "csv"
   variables:
     - "precip"
@@ -51,7 +50,7 @@ weather:
   missing_policy: "warn"               # "fail" | "warn"
 
 streamflow:
-  path: "/mnt/d/streamflow/Q_BA_0001.csv"
+  path: "./data/streamflow/GAUGE01.csv"
   date_col: "date"
   station_id_col: "station_id"
   value_col: "flow"

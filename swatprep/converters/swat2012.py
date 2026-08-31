@@ -52,8 +52,8 @@ from ..qa import QACheck
 @dataclass
 class StationResult:
     """Per-station conversion outcome — shared by PCPConverter and TmpConverter."""
-    name: str        # e.g. "pcp_ANKHE"
-    station: str     # e.g. "ANKHE"
+    name: str        # e.g. "pcp_STATION01"
+    station: str     # e.g. "STATION01"
     lat: float
     lon: float
     elev: float
@@ -274,7 +274,7 @@ class PCPConverter(_BaseStationConverter):
     """Convert raw precipitation files + master metadata to SWAT 2012 .pcp files.
 
     Matching logic:
-        master NAME "pcp_ANKHE"  →  raw file "R_ANKHE.day"  →  output "pcp_ANKHE.pcp"
+        master NAME "pcp_STATION01"  →  raw file "R_STATION01.day"  →  output "pcp_STATION01.pcp"
 
     Input formats auto-detected:
         SWAT Classic: line 1 = YYYYMMDD, subsequent lines = daily float values.
@@ -424,7 +424,7 @@ class TmpConverter(_BaseStationConverter):
     """Convert raw temperature files + master metadata to SWAT 2012 .tmp files.
 
     Matching logic:
-        master NAME "tmp_ANKHE"  →  raw file "tmp_ANKHE.txt"  →  output "tmp_ANKHE.tmp"
+        master NAME "tmp_STATION01"  →  raw file "tmp_STATION01.txt"  →  output "tmp_STATION01.tmp"
 
     Input formats auto-detected:
         SWAT Classic: line 1 = YYYYMMDD, rest = "val1,val2" per line.

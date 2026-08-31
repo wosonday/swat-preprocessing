@@ -1,6 +1,6 @@
-robpcp.pcp: Precipitation data - file written by SWAT+ editor 2019-07-09 17:30:25.915029
+station01.pcp: Precipitation data - file written by SWAT+ editor 2019-07-09 17:30:25.915029
 nbyr     tstep       lat       lon      elev
-  24         0    11.600    37.360  1790.000
+  24         0    15.000   105.000   100.000
 1990    1    0.00000  
 1990    2    0.00000  
 1990    3    0.00000  

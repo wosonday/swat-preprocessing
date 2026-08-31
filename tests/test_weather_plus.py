@@ -157,7 +157,7 @@ class TestSWATPlusWeatherConverter:
 
 
 class TestSWATPlusLive:
-    UPLOADS = Path("/sessions/gracious-focused-allen/mnt/uploads")
+    UPLOADS = Path("/sessions/example-session/mnt/uploads")
 
     def test_live_pcp_header_and_format(self, tmp_path):
         try:
@@ -165,17 +165,17 @@ class TestSWATPlusLive:
                 pytest.skip("Upload files not available")
         except (PermissionError, OSError):
             pytest.skip("Upload directory not accessible in this session")
-        r = pd.read_csv(self.UPLOADS / "R_ANKHE.day")
+        r = pd.read_csv(self.UPLOADS / "R_STATION01.day")
         r.columns = ["date", "precip"]
         data_dir = tmp_path / "data"; data_dir.mkdir()
-        r.to_csv(data_dir / "ANKHE.csv", index=False)
+        r.to_csv(data_dir / "STATION01.csv", index=False)
         master_df = pd.read_csv(self.UPLOADS / "master_pcp.txt")
-        ankhe = master_df[master_df["NAME"] == "pcp_ANKHE"]
-        ankhe.to_csv(tmp_path / "master.txt", index=False)
+        station01 = master_df[master_df["NAME"] == "pcp_STATION01"]
+        station01.to_csv(tmp_path / "master.txt", index=False)
         out = tmp_path / "out"
         result = SWATPlusWeatherConverter(data_dir, out, tmp_path / "master.txt").convert()
         assert failures(result.qa) == []
-        lines = (out / "ankhe.pcp").read_text().splitlines()
+        lines = (out / "station01.pcp").read_text().splitlines()
         assert lines[1] == "nbyr     tstep       lat       lon      elev"
         assert "13.950" in lines[2]
         assert lines[3][:4] == "1977"

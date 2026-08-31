@@ -180,7 +180,7 @@ def convert() -> None:
 def convert_climate(data_dir: Path, out_dir: Path, suffix: str, date_col: str) -> None:
     """Merge per-variable .day files into per-station CSV files.
 
-    Uses default Vietnamese USTH prefix mapping:
+    Uses default default prefix mapping:
     R_STATION.day -> precip, Tx_STATION.day -> tmax, Tm_STATION.day -> tmin.
 
     DATA_DIR  Directory containing files like R_STATION.day, Tx_STATION.day ...
@@ -287,7 +287,7 @@ def convert_streamflow(
 @click.option("--name-prefix", default="pcp_", show_default=True,
               help="Prefix to strip from NAME column to get station code.")
 @click.option("--raw-prefix", default="R_", show_default=True,
-              help="Prefix for raw .day files (e.g. R_ for R_ANKHE.day).")
+              help="Prefix for raw .day files (e.g. R_ for R_STATION01.day).")
 @click.option("--raw-suffix", default=".day", show_default=True,
               help="File suffix for raw data files.")
 @click.option("--value-col", default="Rain", show_default=True,
@@ -310,7 +310,7 @@ def convert_pcp(
     station to its raw file in DATA_DIR, and writes SWAT-format .pcp files to
     OUT_DIR with the 4-line header (title / Lati / Long / Elev).
 
-    Matching: NAME="pcp_ANKHE" -> strip "pcp_" -> "ANKHE" -> "R_ANKHE.day"
+    Matching: NAME="pcp_STATION01" -> strip "pcp_" -> "STATION01" -> "R_STATION01.day"
 
     MASTER_PATH  Master CSV file (ID,NAME,LAT,LONG,ELEVATION).
     DATA_DIR     Directory containing raw R_STATION.day files.
@@ -363,7 +363,7 @@ def convert_pcp(
 @click.option("--name-prefix", default="tmp_", show_default=True,
               help="Prefix to strip from NAME column to get station code.")
 @click.option("--raw-prefix", default="tmp_", show_default=True,
-              help="Prefix for raw temperature files (e.g. tmp_ for tmp_ANKHE.txt).")
+              help="Prefix for raw temperature files (e.g. tmp_ for tmp_STATION01.txt).")
 @click.option("--raw-suffix", default=".txt", show_default=True,
               help="File suffix for raw temperature files.")
 @click.option("--tmin-first/--tmax-first", default=True, show_default=True,
@@ -393,7 +393,7 @@ def convert_tmp(
       - SWAT Classic: line 1 = YYYYMMDD, rest = "tmin,tmax" per line.
       - CSV: columns date, tmax, tmin.
 
-    Matching: NAME="tmp_ANKHE" -> strip "tmp_" -> "ANKHE" -> "tmp_ANKHE.txt"
+    Matching: NAME="tmp_STATION01" -> strip "tmp_" -> "STATION01" -> "tmp_STATION01.txt"
 
     MASTER_PATH  Master CSV file (ID,NAME,LAT,LONG,ELEVATION).
     DATA_DIR     Directory containing raw tmp_STATION.txt files.
@@ -446,12 +446,12 @@ def convert_tmp(
 @click.argument("tmp_dir",    type=click.Path(exists=True, path_type=Path))
 @click.argument("out_dir",    type=click.Path(path_type=Path))
 @click.option("--name-prefix",  default="pcp_", show_default=True,
-              help="Prefix to strip from master NAME (pcp_ -> ANKHE).")
+              help="Prefix to strip from master NAME (pcp_ -> STATION01).")
 @click.option("--pcp-prefix",   default="pcp_", show_default=True,
-              help="Prefix for pcp files (pcp_ANKHE.txt).")
+              help="Prefix for pcp files (pcp_STATION01.txt).")
 @click.option("--pcp-suffix",   default=".txt",  show_default=True)
 @click.option("--tmp-prefix",   default="tmp_", show_default=True,
-              help="Prefix for tmp files (tmp_ANKHE.txt).")
+              help="Prefix for tmp files (tmp_STATION01.txt).")
 @click.option("--tmp-suffix",   default=".txt",  show_default=True)
 @click.option("--tmin-first/--tmax-first", default=True, show_default=True,
               help="Column order in tmp file: tmin,tmax (default) or tmax,tmin.")
@@ -476,8 +476,8 @@ def convert_swatplus(
     SWAT Classic pcp file from PCP_DIR and the tmp file from TMP_DIR,
     merges them, then writes SWAT+ .pcp + .tmp files and pcp.cli/tmp.cli.
 
-    Matching: NAME="pcp_ANKHE" -> station "ANKHE"
-              -> PCP_DIR/pcp_ANKHE.txt + TMP_DIR/tmp_ANKHE.txt
+    Matching: NAME="pcp_STATION01" -> station "STATION01"
+              -> PCP_DIR/pcp_STATION01.txt + TMP_DIR/tmp_STATION01.txt
 
     MASTER_PATH  Master CSV (ID,NAME,LAT,LONG,ELEVATION).
     PCP_DIR      Directory with pcp_STATION.txt files.

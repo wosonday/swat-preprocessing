@@ -205,9 +205,9 @@ class TestTmpConverter:
 
 
 class TestTmpConverterLive:
-    UPLOADS = Path("/sessions/gracious-focused-allen/mnt/uploads")
+    UPLOADS = Path("/sessions/example-session/mnt/uploads")
 
-    def test_live_ankhe(self, tmp_path):
+    def test_live_station01(self, tmp_path):
         try:
             if not (self.UPLOADS / "master_tmp.txt").exists():
                 pytest.skip("Upload files not available")
@@ -215,8 +215,8 @@ class TestTmpConverterLive:
             pytest.skip("Upload directory not accessible in this session")
 
         master_df = pd.read_csv(self.UPLOADS / "master_tmp.txt")
-        ankhe = master_df[master_df["NAME"] == "tmp_ANKHE"]
-        ankhe.to_csv(tmp_path / "master.txt", index=False)
+        station01 = master_df[master_df["NAME"] == "tmp_STATION01"]
+        station01.to_csv(tmp_path / "master.txt", index=False)
 
         result = TmpConverter(
             master_path=tmp_path / "master.txt",
@@ -226,7 +226,7 @@ class TestTmpConverterLive:
 
         assert len(result.files_written) == 1
         lines = result.files_written[0].read_text().splitlines()
-        assert lines[0] == "tmp_ANKHE"
+        assert lines[0] == "tmp_STATION01"
         assert "13.950" in lines[1]
         # Each value line must be exactly 20 chars (2 × 10)
         for line in lines[5:25]:

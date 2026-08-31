@@ -281,13 +281,13 @@ def test_file_pattern_by_name(tmp_dir):
     sta = tmp_dir / "stations.csv"
     sta.write_text(textwrap.dedent("""\
         id,name,lat,lon,elev
-        1,ANKHE,14,108.7,300
+        1,STATION01,14,108.7,300
         2,AYUNPA,13.4,108.5,200
     """), encoding="utf-8")
     data_dir = tmp_dir / "data"
     data_dir.mkdir()
     dates = pd.date_range("2000-01-01", periods=10, freq="D")
-    for name in ("ANKHE", "AYUNPA"):
+    for name in ("STATION01", "AYUNPA"):
         df = pd.DataFrame({
             "date": dates.strftime("%Y-%m-%d"),
             "precip": [1.0] * 10,

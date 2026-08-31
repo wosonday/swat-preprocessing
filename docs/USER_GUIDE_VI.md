@@ -101,8 +101,8 @@ code,swat_code,swat_name
 
 ```csv
 id,name,lat,lon,elev
-ST001,Tram_AnKhe,13.95,108.65,450
-ST002,Tram_BinhDinh,14.10,108.90,120
+ST001,STATION01,15.0,105.0,100
+ST002,STATION02,15.1,105.1,120
 ```
 
 **Data directory:** Thu muc chua file CSV theo tung tram, ten file = `{id}.csv`. Moi file co cac cot:
@@ -119,8 +119,8 @@ File CSV dong chay quan trac dang long-format:
 
 ```csv
 date,station_id,discharge
-2000-01-01,Q_BA_0001,45.2
-2000-01-02,Q_BA_0001,38.7
+2000-01-01,GAUGE01,45.2
+2000-01-02,GAUGE01,38.7
 ```
 
 ---
@@ -133,7 +133,7 @@ File cau hinh (`config.yaml`) la trung tam dieu khien cua swatprep. Moi section 
 
 ```yaml
 project:
-  name: "LuuVuc_AnKhe_2024"
+  name: "ExampleBasin_2024"
   crs: "EPSG:32648"          # He toa do chieu UTM Zone 48N
   output_dir: "./output"
   targets:
@@ -144,7 +144,7 @@ project:
 
 ```yaml
 project:
-  name: "LuuVuc_AnKhe_2024"
+  name: "ExampleBasin_2024"
   crs: "EPSG:32648"
   boundary: "./data/boundary.shp"   # (tuy chon) ranh gioi luu vuc
   output_dir: "./output"
@@ -194,7 +194,7 @@ streamflow:
 ### 4.3 Quy tac quan trong
 
 - **Duong dan tuong doi** duoc giai quyet theo thu muc chua file YAML, khong phai working directory.
-- **Duong dan tuyet doi** cung duoc ho tro (vi du: `D:/DATA_STORAGE/...`).
+- **Duong dan tuyet doi** cung duoc ho tro (vi du: `D:/data/...`).
 - Chi can khai bao cac section ban su dung. Cac section khong khai bao se bi bo qua.
 - `weather.end` phai >= `weather.start`.
 
@@ -229,7 +229,7 @@ Vi du output thanh cong:
   v file_exists:weather.stations: D:/data/weather_stations.csv
   v file_exists:weather.data_dir: D:/data/weather
 
-Config OK -- project 'LuuVuc_AnKhe_2024', domains: dem, landuse, soil, weather, streamflow
+Config OK -- project 'ExampleBasin_2024', domains: dem, landuse, soil, weather, streamflow
 ```
 
 Vi du output loi:
@@ -274,8 +274,8 @@ swatprep build config.yaml --only streamflow
 Output thanh cong:
 
 ```
-Done  -> D:/QSWAT+/AnKhe_rivBasin/data
-Manifest -> D:/QSWAT+/AnKhe_rivBasin/data/manifest.json
+Done  -> D:/QSWAT+/ExampleBasin/data
+Manifest -> D:/QSWAT+/ExampleBasin/data/manifest.json
 ```
 
 Hai file luon duoc tao khi co it nhat 1 domain xu ly thanh cong:
@@ -348,7 +348,7 @@ swatprep convert climate D:/data/raw_climate D:/data/weather_csv
 | `--suffix` | `.day` | Duoi file nguon |
 | `--date-col` | `date` | Ten cot ngay |
 
-**Mapping mac dinh (USTH):** `R_` = precip, `Tx_` = tmax, `Tm_` = tmin
+**Mapping mac dinh:** `R_` = precip, `Tx_` = tmax, `Tm_` = tmin
 
 ### 8.2 Convert streamflow
 
@@ -377,7 +377,7 @@ swatprep convert pcp D:/data/master.csv D:/data/raw_pcp D:/output/pcp_files
 
 **Master CSV** can co cac cot: `ID, NAME, LAT, LONG, ELEVATION`
 
-**Quy tac noi ten:** NAME=`pcp_ANKHE` -> strip `pcp_` -> `ANKHE` -> tim `R_ANKHE.day`
+**Quy tac noi ten:** NAME=`pcp_STATION01` -> strip `pcp_` -> `STATION01` -> tim `R_STATION01.day`
 
 **Tuy chon:**
 
@@ -458,7 +458,7 @@ result = project.build(only="weather")
 from swatprep.config import SWATPrepConfig
 
 cfg = SWATPrepConfig.from_yaml("config.yaml")
-print(cfg.project.name)           # "LuuVuc_AnKhe_2024"
+print(cfg.project.name)           # "ExampleBasin_2024"
 print(cfg.project.crs)            # "EPSG:32648"
 print(cfg.configured_domains())   # ["dem", "landuse", "soil", "weather", "streamflow"]
 ```

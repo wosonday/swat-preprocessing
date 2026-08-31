@@ -58,9 +58,9 @@ python -m pytest -v -k "live"
 ```
 
 Live tests trong dự án:
-- `test_live_ankhe` — đọc `R_ANKHE.day` + `master_pcp.txt`, viết SWAT 2012 `.pcp`
+- `test_live_station01` — đọc `R_STATION01.day` + `master_pcp.txt`, viết SWAT 2012 `.pcp`
 - `test_live_value_precision` — kiểm tra format số trong file thực
-- `test_live_pcp_header_and_format` — kiểm tra header SWAT+ từ `R_ANKHE.day`
+- `test_live_pcp_header_and_format` — kiểm tra header SWAT+ từ `R_STATION01.day`
 
 ---
 
@@ -95,9 +95,9 @@ swatprep convert climate r aw_day_files/ merged_csvs/
 
 ```
 merged_csvs/
-├── ANKHE.csv
-├── BATO.csv
-└── PLEIKU.csv
+├── STATION01.csv
+├── STATION03.csv
+└── STATION02.csv
 ```
 
 **Python API:**
@@ -124,7 +124,7 @@ print(f"Files: {len(result.files_written)}")
 Format `master_pcp.txt`:
 ```
 ID,NAME,LAT,LONG,ELEVATION
-15,pcp_ANKHE,13.95,108.65,416
+15,pcp_STATION01,15.0,105.0,100
 ```
 
 ```bash
@@ -133,9 +133,9 @@ swatprep convert pcp master_pcp.txt raw_day_files/ swat_pcp/
 
 **Output SWAT 2012:**
 ```
-pcp_ANKHE
-Lati      13.950
-Long     108.650
+pcp_STATION01
+Lati      15.00
+Long     105.00
 Elev     416.000
 19770101
      0.000
@@ -160,7 +160,7 @@ print(f"Unmatched: {result.unmatched}")
 **Kiểm tra file output:**
 
 ```bash
-head -8 swat_pcp/pcp_ANKHE.pcp
+head -8 swat_pcp/pcp_STATION01.pcp
 ```
 
 ---
@@ -182,24 +182,24 @@ result = SWATPlusWeatherConverter(
 **Output SWAT+:**
 ```
 swatplus/
-├── ankhe.pcp        # precipitation
-├── ankhe.tmp        # tmax + tmin (2 cột, space separator)
+├── station01.pcp        # precipitation
+├── station01.tmp        # tmax + tmin (2 cột, space separator)
 ├── pcp.cli          # index file
 └── tmp.cli
 ```
 
 **Kiểm tra format `.pcp`:**
 ```bash
-head -5 swatplus/ankhe.pcp
-# pcp_ANKHE SWAT+ pcp file
+head -5 swatplus/station01.pcp
+# pcp_STATION01 SWAT+ pcp file
 # nbyr     tstep       lat       lon      elev
-#   43         0    13.950   108.650   416.000
+#   43         0    15.00   105.00   416.000
 # 1977    1    0.00000
 ```
 
 **Kiểm tra format `.tmp` (2 cột):**
 ```bash
-head -5 swatplus/ankhe.tmp
+head -5 swatplus/station01.tmp
 # 1977    1   25.00000    18.00000
 ```
 
@@ -296,7 +296,7 @@ tests/
 ├── test_config.py           # 16 tests
 ├── test_api.py              # 4 tests (1 skip nếu không có rasterio)
 ├── test_converters.py       # 25 tests (DayFilesConverter + StreamflowConverter + CLI)
-├── test_pcp_converter.py    # 13 tests (2 live với R_ANKHE.day)
+├── test_pcp_converter.py    # 13 tests (2 live với R_STATION01.day)
 ├── test_weather_plus.py     # 13 tests (1 live)
 ├── test_weather.py          # 14 tests
 ├── test_streamflow.py       # 11 tests
@@ -323,5 +323,5 @@ open('file.py', 'w').write(content)
 ```
 
 **Live tests yêu cầu file thực:**
-- `R_ANKHE.day` — 15705 dòng dữ liệu mưa từ 1977-01-01
+- `R_STATION01.day` — 15705 dòng dữ liệu mưa từ 1977-01-01
 - `master_pcp.txt` — metadata 22 trạm

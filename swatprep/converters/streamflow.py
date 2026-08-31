@@ -5,7 +5,7 @@ Supported input formats:
 
 Format A — Per-station files:
     cols: date (ISO YYYY-MM-DD), discharge (m3/s)
-    e.g. Q_BA_0001.csv, Q_BA_0002.csv
+    e.g. GAUGE01.csv, GAUGE02.csv
 
 Format B — Wide format with YYYYMMDD dates:
     cols: date (YYYYMMDD int or str), Q_HT_0001, Q_HT_0002, ... (NA for missing)
@@ -211,7 +211,7 @@ class StreamflowConverter:
 
         frames: list[pd.DataFrame] = []
         for fpath in files:
-            station_id = fpath.stem   # Q_BA_0001 from Q_BA_0001.csv
+            station_id = fpath.stem   # GAUGE01 from GAUGE01.csv
             try:
                 df = pd.read_csv(fpath, parse_dates=[self.date_col])
                 if self.src_value_col not in df.columns:

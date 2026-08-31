@@ -180,12 +180,12 @@ class TestPCPConverter:
 
 
 class TestPCPConverterLiveData:
-    """Integration tests against the actual uploaded ANKHE sample."""
+    """Integration tests against the actual uploaded STATION01 sample."""
 
-    UPLOADS = Path("/sessions/gracious-focused-allen/mnt/uploads")
+    UPLOADS = Path("/sessions/example-session/mnt/uploads")
 
-    def test_live_ankhe(self, tmp_path):
-        """Convert R_ANKHE.day + master_pcp.txt -> valid pcp_ANKHE.pcp."""
+    def test_live_station01(self, tmp_path):
+        """Convert R_STATION01.day + master_pcp.txt -> valid pcp_STATION01.pcp."""
         from swatprep.converters import PCPConverter
 
         try:
@@ -194,26 +194,26 @@ class TestPCPConverterLiveData:
         except (PermissionError, OSError):
             pytest.skip("Upload directory not accessible in this session")
 
-        # Use only ANKHE row from master
+        # Use only STATION01 row from master
         master_df = pd.read_csv(self.UPLOADS / "master_pcp.txt")
-        ankhe = master_df[master_df["NAME"] == "pcp_ANKHE"]
-        ankhe_master = tmp_path / "master.txt"
-        ankhe.to_csv(ankhe_master, index=False)
+        station01 = master_df[master_df["NAME"] == "pcp_STATION01"]
+        station01_master = tmp_path / "master.txt"
+        station01.to_csv(station01_master, index=False)
 
         result = PCPConverter(
-            master_path=ankhe_master,
+            master_path=station01_master,
             data_dir=self.UPLOADS,
             out_dir=tmp_path / "out",
         ).convert()
 
         assert len(result.files_written) == 1
         lines = result.files_written[0].read_text().splitlines()
-        assert lines[0] == "pcp_ANKHE"
+        assert lines[0] == "pcp_STATION01"
         assert "13.950" in lines[1]
         assert "108.650" in lines[2]
         assert "416.000" in lines[3]
         assert lines[4] == "19770101"
-        # 15705 data rows in pcp_ANKHE.txt (from wc -l = 15706 incl. header line)
+        # 15705 data rows in pcp_STATION01.txt (from wc -l = 15706 incl. header line)
         assert len(lines) == 5 + 15705  # header(5) + data rows
 
     def test_live_value_precision(self, tmp_path):
@@ -227,6 +227,6 @@ class TestPCPConverterLiveData:
             pytest.skip("Upload directory not accessible in this session")
 
         master_df = pd.read_csv(self.UPLOADS / "master_pcp.txt")
-        ankhe = master_df[master_df["NAME"] == "pcp_ANKHE"]
-        ankhe_master = tmp_path / "master.txt"
+        station01 = master_df[master_df["NAME"] == "pcp_STATION01"]
+        station01_master = tmp_path / "master.txt"
     

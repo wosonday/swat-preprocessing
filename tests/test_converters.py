@@ -238,7 +238,7 @@ def _make_per_station_dir(tmp_path: Path, n_stations: int = 2, n_days: int = 3) 
     dates = ["2000-01-%02d" % (day + 1) for day in range(n_days)]
     for i in range(1, n_stations + 1):
         df = pd.DataFrame({"date": dates, "discharge": [float(i) * 10] * n_days})
-        df.to_csv(d / ("Q_BA_%04d.csv" % i), index=False)
+        df.to_csv(d / ("GAUGE_%04d.csv" % i), index=False)
     return d
 
 
@@ -287,19 +287,19 @@ class TestStreamflowConverterPerStation:
         src = _make_per_station_dir(tmp_path, n_stations=2)
         out = tmp_path / "long.csv"
         result = StreamflowConverter(src, input_format="per_station").convert(out)
-        assert set(result.stations) == {"Q_BA_0001", "Q_BA_0002"}
+        assert set(result.stations) == {"GAUGE01", "GAUGE02"}
 
     def test_single_file_per_station_mode(self, tmp_path):
         from swatprep.converters import StreamflowConverter
 
         dates = ["2000-01-01", "2000-01-02"]
         df = pd.DataFrame({"date": dates, "discharge": [5.0, 6.0]})
-        single = tmp_path / "Q_BA_0001.csv"
+        single = tmp_path / "GAUGE01.csv"
         df.to_csv(single, index=False)
         out = tmp_path / "long.csv"
         result = StreamflowConverter(single, input_format="per_station").convert(out)
         assert result.n_stations == 1
-        assert result.stations == ["Q_BA_0001"]
+        assert result.stations == ["GAUGE01"]
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
-robwind.wnd: Wind speed data - file written by SWAT+ editor 2019-07-09 17:30:26.382781
+station01.wnd: Wind speed data - file written by SWAT+ editor 2019-07-09 17:30:26.382781
 nbyr     tstep       lat       lon      elev
-  24         0    11.600    37.360  1790.000
+  24         0    15.000   105.000   100.000
 1990    1    0.40000  
 1990    2    1.46000  
 1990    3    1.18000  

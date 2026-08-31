@@ -20,7 +20,7 @@ Usage:
         out_dir=Path("data/weather/converted/"),
     )
     result = conv.convert()
-    print(result.stations_found)   # {"ANKHE", "DAKTO", ...}
+    print(result.stations_found)   # {"STATION01", "STATION02", ...}
     print(result.files_written)    # [Path("..."), ...]
 """
 
@@ -143,8 +143,8 @@ class DayFilesConverter:
             pattern = f"{prefix}*{self.suffix}"
             for fpath in sorted(self.data_dir.glob(pattern)):
                 # station name = filename minus prefix and suffix
-                stem = fpath.stem          # e.g. "R_ANKHE"
-                station = stem[len(prefix):]  # e.g. "ANKHE"
+                stem = fpath.stem          # e.g. "R_STATION01"
+                station = stem[len(prefix):]  # e.g. "STATION01"
                 if station not in station_vars:
                     station_vars[station] = {}
                 station_vars[station][tgt_col] = (fpath, src_col)

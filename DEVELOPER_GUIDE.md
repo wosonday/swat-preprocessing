@@ -1077,12 +1077,12 @@ Merges multiple `.day` variable files into one per-station CSV.
 from swatprep.converters import DayFilesConverter
 
 result = DayFilesConverter(
-    data_dir=Path("raw/"),       # contains R_ANKHE.day, Tx_ANKHE.day, Tm_ANKHE.day
+    data_dir=Path("raw/"),       # contains R_STATION01.day, Tx_STATION01.day, Tm_STATION01.day
     out_dir=Path("merged/"),
 ).convert()
 
-print(result.stations_found)    # ["ANKHE", "BATO", ...]
-print(result.files_written)     # [Path("merged/ANKHE.csv"), ...]
+print(result.stations_found)    # ["STATION01", "STATION03", ...]
+print(result.files_written)     # [Path("merged/STATION01.csv"), ...]
 ```
 
 ---
@@ -1116,7 +1116,7 @@ pcp = PCPConverter(
     out_dir=Path("swat_pcp/"),
 ).convert()
 
-print(pcp.files_written)   # [Path("swat_pcp/pcp_ANKHE.pcp"), ...]
+print(pcp.files_written)   # [Path("swat_pcp/pcp_STATION01.pcp"), ...]
 print(pcp.unmatched)       # stations in master with no matching raw file
 
 # Temperature
@@ -1146,9 +1146,9 @@ class SWAT2012ConvertResult:
 
 **Output format — `.pcp` file:**
 ```
-pcp_ANKHE
-Lati      13.950
-Long     108.650
+pcp_STATION01
+Lati      15.00
+Long     105.00
 Elev     416.000
 19770101
      0.000
@@ -1157,9 +1157,9 @@ Elev     416.000
 
 **Output format — `.tmp` file:**
 ```
-tmp_ANKHE
-Lati      13.950
-Long     108.650
+tmp_STATION01
+Lati      15.00
+Long     105.00
 Elev     416.000
 19770101
     25.000    18.000
@@ -1186,7 +1186,7 @@ result = SWATPlusWeatherConverter(
 ).convert()
 ```
 
-**Output:** `ankhe.pcp`, `ankhe.tmp`, `pcp.cli`, `tmp.cli`
+**Output:** `station01.pcp`, `station01.tmp`, `pcp.cli`, `tmp.cli`
 
 > Note: SWAT+ temperature files use `.tmp` extension (not `.tem`).
 
