@@ -2,8 +2,10 @@
 
 Unlike :class:`~swatprep.writers.weather.WeatherWriter` (which emits SWAT
 Classic ``.pcp`` / ``.tmp`` files), this writer produces the SWAT+ daily
-weather format plus the per-variable ``.cli`` index files that SWAT+ /
-QSWAT+ / SWAT+ Editor expect.
+weather format plus the ``.cli`` index files that SWAT+ / QSWAT+ / SWAT+
+Editor expect -- including the two "linking" files SWAT+'s TxtInOut actually
+reads to resolve each station's climate data: ``weather-sta.cli`` (station
+registry) and ``weather-wgn.cli`` (WGN statistics in SWAT+'s fixed format).
 
 SWAT+ daily file format (one file per station per variable)::
 
@@ -19,6 +21,18 @@ SWAT+ daily file format (one file per station per variable)::
     filename
     <station1>.pcp
     <station2>.pcp
+
+``weather-sta.cli`` (one row per station)::
+
+    name  wgn  pcp  tmp  slr  hmd  wnd  pet  atmo_dep
+
+Each of pcp/tmp/slr/hmd/wnd is the written data file's stem (no extension)
+if that variable was written for the station, else "sim". pet/atmo_dep are
+not computed by swatprep and are always "null".
+
+``weather-wgn.cli`` -- one WGN group per station (group name == station
+name), each a 3-line header (title, group header, column header) followed
+by 12 monthly rows, built directly from ``WeatherResult.wgn_stats``.
 
 The daily rows carry an explicit ``year`` + ``day-of-year`` column, which is
 what distinguishes SWAT+ input from SWAT Classic (a bare value-per-line list).
@@ -36,14 +50,35 @@ from ..core.weather import WeatherResult
 
 _NODATA = -99.0
 
+# (WGN column in WeatherResult.wgn_stats, weather-wgn.cli column header)
+_WGN_COLUMN_MAP: list[tuple[str, str]] = [
+    ("TMPMX", "tmp_max_ave"),
+    ("TMPMN", "tmp_min_ave"),
+    ("TMPSTDMX", "tmp_max_sd"),
+    ("TMPSTDMN", "tmp_min_sd"),
+    ("PCPMM", "pcp_ave"),
+    ("PCPSTD", "pcp_sd"),
+    ("PCPSKW", "pcp_skew"),
+    ("PR_W1", "wet_dry"),
+    ("PR_W2", "wet_wet"),
+    ("PCPD", "pcp_days"),
+    ("RAINHHMX", "pcp_hhr"),
+    ("SOLARAV", "slr_ave"),
+    ("DEWPT", "dew_ave"),
+    ("WNDAV", "wnd_ave"),
+]
+
+# weather-sta.cli variable columns, in order -- matches _Spec.ext[1:] below.
+_STA_VAR_KEYS = ["pcp", "tmp", "slr", "hmd", "wnd"]
+
 
 @dataclass(frozen=True)
 class _Spec:
     key: str                 # primary daily-variable key in WeatherResult.daily
     ext: str                 # output file extension
     cli: str                 # .cli index filename
-    descr: str               # data-file header description
-    cli_desc: str            # .cli header description
+    descr: str                # data-file header description
+    cli_desc: str             # .cli header description
     second: str | None = None  # secondary key for two-column files (tmin)
 
 
@@ -74,6 +109,8 @@ class SWATPlusWeatherWriter:
 
         written: list[Path] = []
         cli_registry: dict[str, list[str]] = {spec.cli: [] for spec in _SPECS}
+        station_files: dict[object, dict[str, str]] = {}
+        global_nbyr = 0
 
         for spec in _SPECS:
             frame = daily.get(spec.key)
@@ -85,6 +122,7 @@ class SWATPlusWeatherWriter:
             year_arr = idx.year.to_numpy()
             doy_arr = idx.day_of_year.to_numpy()
             nbyr = int(idx.year.max() - idx.year.min() + 1)
+            global_nbyr = max(global_nbyr, nbyr)
             # Uniqueness is scoped per variable: <name>.pcp and <name>.tmp
             # never collide, only two same-named stations within one variable do.
             used_stems: set[str] = set()
@@ -112,6 +150,7 @@ class SWATPlusWeatherWriter:
                     )
                 written.append(fpath)
                 cli_registry[spec.cli].append(filename)
+                station_files.setdefault(sid, {})[spec.ext[1:]] = stem
 
         # Per-variable .cli index files
         for spec in _SPECS:
@@ -127,7 +166,16 @@ class SWATPlusWeatherWriter:
             cli_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
             written.append(cli_path)
 
-        # WGN statistics and station list (shared reference outputs)
+        # weather-sta.cli / weather-wgn.cli -- the linking files SWAT+ actually
+        # reads to resolve each station's climate data.
+        if not self.result.wgn_stats.empty:
+            sids = list(self.result.wgn_stats["station_id"].unique())
+            wgn_names = self._assign_wgn_names(stations, sids)
+            written.append(_write_weather_wgn(out, self.result.wgn_stats, stations, wgn_names, global_nbyr, ts))
+            written.append(_write_weather_sta(out, station_files, wgn_names, ts))
+
+        # WGN statistics and station list (existing reference outputs, kept
+        # alongside weather-wgn.cli for csv-friendly inspection)
         if not self.result.wgn_stats.empty:
             wgn_path = out / "wgn.csv"
             self.result.wgn_stats.to_csv(wgn_path, index=False)
@@ -159,6 +207,18 @@ class SWATPlusWeatherWriter:
             stem = f"{name}_{sid}"
         used.add(stem)
         return stem
+
+    @classmethod
+    def _assign_wgn_names(cls, stations: pd.DataFrame, sids: list) -> dict:
+        """One WGN group name per station id, collision-free (reuses the same
+        dedup rule as data-file stems, computed once so weather-sta.cli and
+        weather-wgn.cli agree on the same name)."""
+        used: set[str] = set()
+        names: dict = {}
+        for sid in sids:
+            name, *_ = cls._station_meta(stations, sid)
+            names[sid] = cls._unique_stem(name, sid, used)
+        return names
 
 
 # ---------------------------------------------------------------------------
@@ -207,3 +267,51 @@ def _write_two_col(
             for y, d, tx, tn in zip(year_arr, doy_arr, primary, secondary)
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_weather_wgn(
+    out: Path,
+    wgn_stats: pd.DataFrame,
+    stations: pd.DataFrame,
+    wgn_names: dict,
+    nbyr: int,
+    ts: str,
+) -> Path:
+    lines = [f"weather-wgn.cli: written by swatprep {ts}"]
+    col_header = "".join(f"{h:>14}" for _, h in _WGN_COLUMN_MAP)
+    for sid, name in wgn_names.items():
+        if sid in stations.index:
+            meta = stations.loc[sid]
+            lat, lon, elev = float(meta["lat"]), float(meta["lon"]), float(meta["elev"])
+        else:
+            lat = lon = elev = 0.0
+        lines.append(f"{name:<24}{lat:14.5f}{lon:14.5f}{elev:14.5f}{nbyr:10d}")
+        lines.append(col_header)
+        rows = wgn_stats[wgn_stats["station_id"] == sid].sort_values("month")
+        for _, row in rows.iterrows():
+            lines.append("".join(f"{float(row[src]):14.5f}" for src, _ in _WGN_COLUMN_MAP))
+    path = out / "weather-wgn.cli"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _write_weather_sta(
+    out: Path,
+    station_files: dict,
+    wgn_names: dict,
+    ts: str,
+) -> Path:
+    header = "".join(f"{h:<27}" for h in ["name", "wgn", *_STA_VAR_KEYS]) + "".join(
+        f"{h:<10}" for h in ["pet", "atmo_dep"]
+    )
+    lines = [f"weather-sta.cli: written by swatprep {ts}", header]
+    for sid, name in wgn_names.items():
+        files = station_files.get(sid, {})
+        row_vars = [files.get(key, "sim") for key in _STA_VAR_KEYS]
+        row = "".join(f"{v:<27}" for v in [name, name, *row_vars]) + "".join(
+            f"{v:<10}" for v in ["null", "null"]
+        )
+        lines.append(row)
+    path = out / "weather-sta.cli"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
