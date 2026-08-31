@@ -164,3 +164,29 @@ class TestStationWeatherConverterTemperature:
         assert not result.wgn_stats.empty
         # WGN station set = union of precip and tmax columns -> both "1" and "2"
         assert set(result.wgn_stats["station_id"]) == {"1", "2"}
+
+
+class TestStationWeatherConverterRoundTrip:
+    def test_round_trip_through_weather_writer(self, tmp_path):
+        from swatprep.converters.station_weather import StationWeatherConverter
+        from swatprep.writers.weather import WeatherWriter
+
+        master = _make_master(tmp_path, "master_pcp.txt", _PCP_STATIONS)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        _write_swat_pcp(raw_dir / "pcp_ALPHA.txt", "1990-01-01", [0.0, 0.3, 1.5])
+        _write_swat_pcp(raw_dir / "pcp_BETA.txt", "1990-01-01", [0.0, 0.0, 2.1])
+
+        result1 = StationWeatherConverter(pcp_master=master, pcp_dir=raw_dir).convert()
+
+        out = tmp_path / "out"
+        WeatherWriter(result1, out).write()
+
+        result2 = StationWeatherConverter(
+            pcp_master=out / "master_pcp.txt", pcp_dir=out,
+        ).convert()
+
+        assert list(result2.daily["precip"]["1"]) == [0.0, 0.3, 1.5]
+        assert list(result2.daily["precip"]["2"]) == [0.0, 0.0, 2.1]
+        assert result2.stations.loc["1", "name"] == "ALPHA"
+        assert result2.stations.loc["2", "name"] == "BETA"
