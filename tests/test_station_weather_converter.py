@@ -102,6 +102,25 @@ class TestStationWeatherConverterPrecip:
         with pytest.raises(InputValidationError, match="together"):
             StationWeatherConverter(pcp_master=tmp_path / "master_pcp.txt")
 
+    def test_no_data_value_converted_to_nan(self, tmp_path):
+        from swatprep.converters.station_weather import StationWeatherConverter
+
+        master = _make_master(tmp_path, "master_pcp.txt", [_PCP_STATIONS[0]])
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        # Write precip file with -99.0 sentinel value among real values
+        _write_swat_pcp(raw_dir / "pcp_ALPHA.txt", "1990-01-01", [0.5, -99.0, 1.2, -99.0, 0.8])
+
+        result = StationWeatherConverter(pcp_master=master, pcp_dir=raw_dir).convert()
+
+        precip_data = list(result.daily["precip"]["1"])
+        # Check that the sentinel values (-99.0) have been converted to NaN
+        assert precip_data[0] == 0.5
+        assert pd.isna(precip_data[1])  # was -99.0
+        assert precip_data[2] == 1.2
+        assert pd.isna(precip_data[3])  # was -99.0
+        assert precip_data[4] == 0.8
+
 
 class TestStationWeatherConverterTemperature:
     def test_reads_swat_classic_tmp(self, tmp_path):

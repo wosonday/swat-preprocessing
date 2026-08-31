@@ -231,14 +231,21 @@ class StationWeatherConverter:
     def _read_raw_file(self, raw_file: Path, variables: list[str]) -> pd.DataFrame:
         if self._is_swat_format(raw_file):
             if variables == ["precip"]:
-                return self._read_swat_pcp(raw_file)
-            return self._read_swat_tmp(raw_file)
+                df = self._read_swat_pcp(raw_file)
+            else:
+                df = self._read_swat_tmp(raw_file)
+        else:
+            df = pd.read_csv(raw_file, parse_dates=["date"])
+            missing = set(variables) - set(df.columns)
+            if missing:
+                raise InputValidationError(f"{raw_file.name}: missing column(s) {sorted(missing)}")
+            df = df[["date", *variables]]
 
-        df = pd.read_csv(raw_file, parse_dates=["date"])
-        missing = set(variables) - set(df.columns)
-        if missing:
-            raise InputValidationError(f"{raw_file.name}: missing column(s) {sorted(missing)}")
-        return df[["date", *variables]]
+        # Replace no_data_value sentinel with NaN for all variable columns
+        for var in variables:
+            df[var] = df[var].replace(self.no_data_value, float("nan"))
+
+        return df
 
     @staticmethod
     def _read_swat_pcp(raw_file: Path) -> pd.DataFrame:
