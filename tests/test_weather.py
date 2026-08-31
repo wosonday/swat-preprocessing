@@ -157,35 +157,49 @@ def test_weather_writer_creates_pcp_and_tmp(weather_stations_csv, weather_data_d
     out = tmp_dir / "weather_out"
     written = WeatherWriter(result, out).write()
     paths = [p.name for p in written]
-    assert "StationA.pcp" in paths
-    assert "StationB.pcp" in paths
-    assert "StationA.tmp" in paths
-    assert "StationB.tmp" in paths
+    assert "pcp_StationA.txt" in paths
+    assert "pcp_StationB.txt" in paths
+    assert "tmp_StationA.txt" in paths
+    assert "tmp_StationB.txt" in paths
+    assert "master_pcp.txt" in paths
+    assert "master_tmp.txt" in paths
     assert "wgn.csv" in paths
 
 
 def test_pcp_file_format(weather_stations_csv, weather_data_dir, tmp_dir):
+    """No metadata header block; line 1 is the date of the FIRST record (no offset)."""
     from swatprep.writers.weather import WeatherWriter
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
     out = tmp_dir / "weather_out"
     WeatherWriter(result, out).write()
-    pcp = (out / "StationA.pcp").read_text(encoding="utf-8").splitlines()
-    assert pcp[0].startswith("Precipitation data")
-    assert pcp[1].startswith("Lati")
-    assert pcp[4] == "19991231"
-    assert len(pcp[5].strip()) > 0
+    pcp = (out / "pcp_StationA.txt").read_text(encoding="utf-8").splitlines()
+    assert pcp[0] == "20000101"
+    assert len(pcp) == 11  # date line + 10 daily values
+    assert pcp[1] == "1.0"  # weather_data_dir fixture: StationA precip[0] == 1.0
 
 
-def test_tmp_file_has_two_values_per_line(weather_stations_csv, weather_data_dir, tmp_dir):
+def test_tmp_file_has_tmin_tmax_per_line(weather_stations_csv, weather_data_dir, tmp_dir):
     from swatprep.writers.weather import WeatherWriter
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
     out = tmp_dir / "weather_out"
     WeatherWriter(result, out).write()
-    tmp_lines = (out / "StationA.tmp").read_text(encoding="utf-8").splitlines()
-    data_line = tmp_lines[5]
-    assert len(data_line) == 20
+    tmp_lines = (out / "tmp_StationA.txt").read_text(encoding="utf-8").splitlines()
+    tmin_str, tmax_str = tmp_lines[1].split(",")
+    assert float(tmin_str) == 22.0  # weather_data_dir fixture: StationA tmin[0]
+    assert float(tmax_str) == 30.1  # weather_data_dir fixture: StationA tmax[0]
+
+
+def test_master_pcp_has_uppercase_columns_and_prefix(weather_stations_csv, weather_data_dir, tmp_dir):
+    from swatprep.writers.weather import WeatherWriter
+    cfg = _make_cfg(weather_stations_csv, weather_data_dir)
+    result = WeatherPreprocessor(cfg).run()
+    out = tmp_dir / "weather_out"
+    WeatherWriter(result, out).write()
+    master = pd.read_csv(out / "master_pcp.txt")
+    assert list(master.columns) == ["ID", "NAME", "LAT", "LONG", "ELEVATION"]
+    assert {"pcp_StationA", "pcp_StationB"}.issubset(set(master["NAME"]))
 
 
 # ---------------------------------------------------------------------------
@@ -241,11 +255,11 @@ def test_split_source_loads_different_stations(tmp_dir):
     out = tmp_dir / "weather_out"
     written = WeatherWriter(result, out).write()
     paths = [p.name for p in written]
-    assert "PrecipA.pcp" in paths
-    assert "TempA.tmp" in paths
-    assert "PrecipA.tmp" not in paths
-    assert "precip_stations.csv" in paths
-    assert "temp_stations.csv" in paths
+    assert "pcp_PrecipA.txt" in paths
+    assert "tmp_TempA.txt" in paths
+    assert "tmp_PrecipA.txt" not in paths
+    assert "master_pcp.txt" in paths
+    assert "master_tmp.txt" in paths
 
     from swatprep.qa import failures as _failures
     assert not _failures(result.qa)
