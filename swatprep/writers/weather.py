@@ -64,7 +64,8 @@ class WeatherWriter:
                 p = out / f"{self.PCP_PREFIX}{code}.txt"
                 _write_pcp(p, precip_wide[sid])
                 written.append(p)
-            written.append(self._write_master(out, precip_stations, self.PCP_PREFIX, "master_pcp.txt"))
+            written_precip_stations = precip_stations.loc[precip_stations.index.isin(precip_wide.columns)]
+            written.append(self._write_master(out, written_precip_stations, self.PCP_PREFIX, "master_pcp.txt"))
 
         if tmax_wide is not None:
             for sid, meta in temp_stations.iterrows():
@@ -76,7 +77,8 @@ class WeatherWriter:
                 t = out / f"{self.TMP_PREFIX}{code}.txt"
                 _write_tmp(t, tx, tn)
                 written.append(t)
-            written.append(self._write_master(out, temp_stations, self.TMP_PREFIX, "master_tmp.txt"))
+            written_temp_stations = temp_stations.loc[temp_stations.index.isin(tmax_wide.columns)]
+            written.append(self._write_master(out, written_temp_stations, self.TMP_PREFIX, "master_tmp.txt"))
 
         if not self.result.wgn_stats.empty:
             wgn_path = out / "wgn.csv"

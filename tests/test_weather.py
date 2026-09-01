@@ -202,6 +202,39 @@ def test_master_pcp_has_uppercase_columns_and_prefix(weather_stations_csv, weath
     assert {"pcp_StationA", "pcp_StationB"}.issubset(set(master["NAME"]))
 
 
+def test_master_pcp_excludes_stations_with_no_written_data_file(weather_stations_csv, tmp_dir):
+    """A station whose raw data file is missing (only a fail QA, not a hard
+    error since another station succeeds) must not appear in master_pcp.txt --
+    that file is a real SWAT2012 model input, not just a reference list."""
+    from swatprep.writers.weather import WeatherWriter
+
+    data_dir = tmp_dir / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=10, freq="D")
+    df = pd.DataFrame({
+        "date": dates.strftime("%Y-%m-%d"),
+        "precip": [1.0] * 10,
+        "tmax": [30.0] * 10,
+        "tmin": [20.0] * 10,
+    })
+    # Only ST001's data file is written; ST002's is missing entirely.
+    df.to_csv(data_dir / "ST001.csv", index=False)
+
+    cfg = _make_cfg(weather_stations_csv, data_dir)
+    result = WeatherPreprocessor(cfg).run()
+
+    from swatprep.qa import failures as _failures
+    fail_checks = _failures(result.qa)
+    assert any("data_file" in c.name for c in fail_checks)
+
+    out = tmp_dir / "weather_out"
+    WeatherWriter(result, out).write()
+    master = pd.read_csv(out / "master_pcp.txt")
+    assert "pcp_StationA" in set(master["NAME"])
+    assert "pcp_StationB" not in set(master["NAME"])
+    assert "ST002" not in set(master["ID"])
+
+
 # ---------------------------------------------------------------------------
 # Split-source mode (separate precip / temperature stations)
 # ---------------------------------------------------------------------------
