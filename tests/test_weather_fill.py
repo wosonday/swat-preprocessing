@@ -107,6 +107,43 @@ class TestWeatherGapFillerPrecipRatio:
         assert row["n_overlap"] == 1
         assert row["status"] == "warn"
 
+    def test_zero_ratio_still_fills_but_flags_warn(self, tmp_path):
+        from swatprep.config import WeatherConfig
+        from swatprep.core.weather_fill import WeatherGapFiller
+
+        real_sta = _write_stations_csv(tmp_path, "real_stations.csv", [{"id": "S1", **_META}])
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        dates = ["2000-01-01", "2000-01-02", "2000-01-03"]
+        # Overlap days are 0 and 2: real is 0.0 on both (mean(obs[overlap]) == 0),
+        # fill is 2.0/3.0 on both (mean(fill[overlap]) == 2.5 > 0) -- so the
+        # mean_fill<=0 skip guard does NOT trigger, but the resulting ratio is 0.0.
+        _write_station_csv(real_dir, "S1", dates, precip=[0.0, None, 0.0])
+
+        fill_sta = _write_stations_csv(tmp_path, "fill_stations.csv", [{"id": "S1", **_META}])
+        fill_dir = tmp_path / "fill"
+        fill_dir.mkdir()
+        _write_station_csv(fill_dir, "S1", dates, precip=[2.0, 5.0, 3.0])
+
+        real_cfg = WeatherConfig(
+            stations=real_sta, data_dir=real_dir, variables=["precip"],
+            start="2000-01-01", end="2000-01-03", missing_policy="warn",
+        )
+        fill_cfg = WeatherConfig(
+            stations=fill_sta, data_dir=fill_dir, variables=["precip"],
+            start="2000-01-01", end="2000-01-03", missing_policy="warn",
+        )
+
+        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=1).run()
+
+        filled = result.daily["precip"]["S1"]
+        assert filled.iloc[1] == 0.0  # missing day IS filled, with 0.0 (5.0 * 0.0)
+
+        row = result.report.iloc[0]
+        assert row["correction_type"] == "ratio"
+        assert row["correction_value"] == pytest.approx(0.0)
+        assert row["status"] == "warn"
+
 
 class TestWeatherGapFillerTemperatureOffset:
     def test_offset_correction_fills_temperature(self, tmp_path):

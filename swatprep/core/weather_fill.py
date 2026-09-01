@@ -91,6 +91,8 @@ def _correct_and_fill(
     report["correction_value"] = correction_value
     if n_overlap < min_overlap_days:
         report["status"] = "warn"
+    if correction_type == "ratio" and correction_value == 0:
+        report["status"] = "warn"
 
     return filled, report
 
@@ -169,6 +171,12 @@ class WeatherGapFiller:
                         msg = (
                             f"{sid}: cannot compute precip ratio for '{var}' "
                             f"(fill-source mean is zero over overlap)"
+                        )
+                    elif report["correction_type"] == "ratio" and report["correction_value"] == 0:
+                        msg = (
+                            f"{sid}: '{var}' fill applied with a zero correction factor -- "
+                            f"real station recorded no precipitation over the overlap period, "
+                            f"all filled days will be 0.0"
                         )
                     else:
                         msg = (
