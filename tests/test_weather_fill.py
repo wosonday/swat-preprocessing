@@ -442,3 +442,45 @@ class TestCLIFillWeather:
         ])
 
         assert res.exit_code != 0
+
+    def test_cli_fill_weather_invalid_variable_name_fails_cleanly(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        real_sta, real_dir, fill_sta, fill_dir = self._build_inputs(tmp_path)
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(main, [
+            "fill", "weather",
+            "--stations", str(real_sta), "--data-dir", str(real_dir),
+            "--fill-stations", str(fill_sta), "--fill-data-dir", str(fill_dir),
+            "--variables", "rainfall",
+            "--start", "2000-01-01", "--end", "2000-01-03",
+            "--min-overlap-days", "1",
+            str(out),
+        ])
+
+        assert res.exit_code != 0
+        assert res.exit_code == 1
+        assert "Traceback" not in res.output
+
+    def test_cli_fill_weather_end_before_start_fails_cleanly(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        real_sta, real_dir, fill_sta, fill_dir = self._build_inputs(tmp_path)
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(main, [
+            "fill", "weather",
+            "--stations", str(real_sta), "--data-dir", str(real_dir),
+            "--fill-stations", str(fill_sta), "--fill-data-dir", str(fill_dir),
+            "--variables", "precip",
+            "--start", "2000-01-05", "--end", "2000-01-01",
+            "--min-overlap-days", "1",
+            str(out),
+        ])
+
+        assert res.exit_code != 0
+        assert res.exit_code == 1
+        assert "Traceback" not in res.output

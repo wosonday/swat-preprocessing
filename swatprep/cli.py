@@ -413,41 +413,49 @@ def fill_weather(
 
     OUT_DIR   Directory where filled station CSVs + fill_report.csv are written.
     """
-    from .config import WeatherConfig
-    from .core.weather_fill import WeatherGapFiller
-    from .writers.weather_fill import WeatherFillWriter
-    from .qa import failures, warnings
+    try:
+        from .config import WeatherConfig
+        from .core.weather_fill import WeatherGapFiller
+        from .writers.weather_fill import WeatherFillWriter
+        from .qa import failures, warnings
 
-    var_list = [v.strip() for v in variables.split(",") if v.strip()]
+        var_list = [v.strip() for v in variables.split(",") if v.strip()]
 
-    real_cfg = WeatherConfig(
-        stations=stations, data_dir=data_dir, file_pattern=file_pattern,
-        variables=var_list, start=start, end=end, missing_policy="warn",
-    )
-    fill_cfg = WeatherConfig(
-        stations=fill_stations, data_dir=fill_data_dir, file_pattern=fill_file_pattern,
-        variables=var_list, start=start, end=end, missing_policy="warn",
-    )
+        real_cfg = WeatherConfig(
+            stations=stations, data_dir=data_dir, file_pattern=file_pattern,
+            variables=var_list, start=start, end=end, missing_policy="warn",
+        )
+        fill_cfg = WeatherConfig(
+            stations=fill_stations, data_dir=fill_data_dir, file_pattern=fill_file_pattern,
+            variables=var_list, start=start, end=end, missing_policy="warn",
+        )
 
-    result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=min_overlap_days).run()
+        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=min_overlap_days).run()
 
-    for c in result.qa:
-        symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
-        click.echo(f"  {symbol} {c.name}: {c.message}")
+        for c in result.qa:
+            symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
+            click.echo(f"  {symbol} {c.name}: {c.message}")
 
-    fail_list = failures(result.qa)
-    if fail_list:
-        click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
+        fail_list = failures(result.qa)
+        if fail_list:
+            click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
+            sys.exit(1)
+
+        written = WeatherFillWriter(result, out_dir).write()
+
+        click.echo(f"\nFiles written : {len(written)}")
+        click.echo(f"Output dir    : {out_dir}")
+
+        warn_list = warnings(result.qa)
+        if warn_list:
+            click.echo(f"Warnings: {len(warn_list)}")
+
+    except ValidationError as e:
+        click.echo(f"Config schema error:\n{e}", err=True)
         sys.exit(1)
-
-    written = WeatherFillWriter(result, out_dir).write()
-
-    click.echo(f"\nFiles written : {len(written)}")
-    click.echo(f"Output dir    : {out_dir}")
-
-    warn_list = warnings(result.qa)
-    if warn_list:
-        click.echo(f"Warnings: {len(warn_list)}")
+    except SWATPrepError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
