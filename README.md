@@ -119,6 +119,22 @@ Use converters to *prepare* raw data into per-station CSVs, then point
 [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) for how weather output maps to
 SWAT+/Classic.
 
+### Fill gaps from an external source
+
+`swatprep fill weather` fills missing days in observed station data using a
+bias-corrected external source (e.g. satellite/reanalysis, pre-extracted by
+you into the same per-station CSV format), before `build`:
+
+```bash
+swatprep fill weather \
+  --stations STATIONS.csv --data-dir DATA_DIR \
+  --fill-stations FILL_STATIONS.csv --fill-data-dir FILL_DATA_DIR \
+  --variables precip,tmax,tmin --start 2000-01-01 --end 2000-12-31 \
+  OUT_DIR
+```
+
+Point `weather.data_dir` at `OUT_DIR` and run `swatprep build` as normal.
+
 ## Python API
 
 ```python

@@ -10,6 +10,7 @@ Commands:
     swatprep convert climate DATA_DIR OUT_DIR
     swatprep convert streamflow SOURCE OUT_PATH
     swatprep convert weather [--pcp-master ... --pcp-dir ...] [--tmp-master ... --tmp-dir ...] OUT_DIR
+    swatprep fill weather --stations ... --data-dir ... --fill-stations ... --fill-data-dir ... OUT_DIR
 """
 
 from __future__ import annotations
@@ -357,6 +358,104 @@ def convert_weather(
     warn_list = warnings(result.qa)
     if warn_list:
         click.echo(f"Warnings: {len(warn_list)}")
+
+
+# ---------------------------------------------------------------------------
+# fill
+# ---------------------------------------------------------------------------
+
+
+@main.group()
+def fill() -> None:
+    """Fill gaps in observed data using an external bias-corrected source."""
+
+
+@fill.command("weather")
+@click.option("--stations", type=click.Path(exists=True, path_type=Path), required=True,
+              help="Station metadata CSV for the real (observed) data (id,name,lat,lon,elev).")
+@click.option("--data-dir", type=click.Path(exists=True, path_type=Path), required=True,
+              help="Directory of real per-station daily CSVs.")
+@click.option("--file-pattern", default="{id}.csv", show_default=True,
+              help="Filename pattern for real station files.")
+@click.option("--fill-stations", type=click.Path(exists=True, path_type=Path), required=True,
+              help="Station metadata CSV for the external fill source (same station ids as --stations).")
+@click.option("--fill-data-dir", type=click.Path(exists=True, path_type=Path), required=True,
+              help="Directory of external fill-source per-station daily CSVs.")
+@click.option("--fill-file-pattern", default="{id}.csv", show_default=True,
+              help="Filename pattern for fill-source station files.")
+@click.option("--variables", default="precip,tmax,tmin", show_default=True,
+              help="Comma-separated list from: precip,tmax,tmin,wind,solar,humidity.")
+@click.option("--start", required=True, help="ISO start date (YYYY-MM-DD).")
+@click.option("--end", required=True, help="ISO end date (YYYY-MM-DD).")
+@click.option("--min-overlap-days", default=10, show_default=True, type=int,
+              help="Minimum overlapping days needed to trust a bias correction.")
+@click.argument("out_dir", type=click.Path(path_type=Path))
+def fill_weather(
+    stations: Path,
+    data_dir: Path,
+    file_pattern: str,
+    fill_stations: Path,
+    fill_data_dir: Path,
+    fill_file_pattern: str,
+    variables: str,
+    start: str,
+    end: str,
+    min_overlap_days: int,
+    out_dir: Path,
+) -> None:
+    """Fill missing days in observed weather station data from an external
+    bias-corrected source, writing swatprep-ready per-station CSVs.
+
+    Computes one overall bias-correction value per station per variable from
+    the days where both --data-dir and --fill-data-dir have data (ratio for
+    precip, additive offset otherwise), then fills only the real station's
+    missing days. A day the real station already has is never overwritten.
+
+    OUT_DIR   Directory where filled station CSVs + fill_report.csv are written.
+    """
+    try:
+        from .config import WeatherConfig
+        from .core.weather_fill import WeatherGapFiller
+        from .writers.weather_fill import WeatherFillWriter
+        from .qa import failures, warnings
+
+        var_list = [v.strip() for v in variables.split(",") if v.strip()]
+
+        real_cfg = WeatherConfig(
+            stations=stations, data_dir=data_dir, file_pattern=file_pattern,
+            variables=var_list, start=start, end=end, missing_policy="warn",
+        )
+        fill_cfg = WeatherConfig(
+            stations=fill_stations, data_dir=fill_data_dir, file_pattern=fill_file_pattern,
+            variables=var_list, start=start, end=end, missing_policy="warn",
+        )
+
+        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=min_overlap_days).run()
+
+        for c in result.qa:
+            symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
+            click.echo(f"  {symbol} {c.name}: {c.message}")
+
+        fail_list = failures(result.qa)
+        if fail_list:
+            click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
+            sys.exit(1)
+
+        written = WeatherFillWriter(result, out_dir).write()
+
+        click.echo(f"\nFiles written : {len(written)}")
+        click.echo(f"Output dir    : {out_dir}")
+
+        warn_list = warnings(result.qa)
+        if warn_list:
+            click.echo(f"Warnings: {len(warn_list)}")
+
+    except ValidationError as e:
+        click.echo(f"Config schema error:\n{e}", err=True)
+        sys.exit(1)
+    except SWATPrepError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
