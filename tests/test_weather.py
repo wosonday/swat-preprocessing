@@ -145,6 +145,43 @@ def test_wgn_unavailable_params_are_minus99(weather_stations_csv, weather_data_d
         assert (wgn[col] == -99.0).all()
 
 
+def test_wgn_station_order_is_sorted_and_deterministic(tmp_dir):
+    """compute_wgn_stats must not depend on set() iteration order -- station
+    order should be alphabetically sorted and identical across repeated runs."""
+    import textwrap
+    from swatprep.core.weather import compute_wgn_stats
+
+    sta = tmp_dir / "stations.csv"
+    sta.write_text(textwrap.dedent("""\
+        id,name,lat,lon,elev
+        ST_Z,StationZ,15.0,105.0,100
+        ST_A,StationA,15.1,105.1,101
+        ST_M,StationM,15.2,105.2,102
+        ST_B,StationB,15.3,105.3,103
+    """), encoding="utf-8")
+    data_dir = tmp_dir / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=5, freq="D")
+    for sid in ("ST_Z", "ST_A", "ST_M", "ST_B"):
+        df = pd.DataFrame({
+            "date": dates.strftime("%Y-%m-%d"),
+            "precip": [1.0] * 5,
+            "tmax": [30.0] * 5,
+            "tmin": [20.0] * 5,
+        })
+        df.to_csv(data_dir / f"{sid}.csv", index=False)
+
+    cfg = _make_cfg(sta, data_dir, end=date(2000, 1, 5))
+    result = WeatherPreprocessor(cfg).run()
+
+    expected_order = sorted(["ST_Z", "ST_A", "ST_M", "ST_B"])
+    order_run1 = list(compute_wgn_stats(result.stations, result.daily, [])["station_id"].unique())
+    order_run2 = list(compute_wgn_stats(result.stations, result.daily, [])["station_id"].unique())
+
+    assert order_run1 == expected_order
+    assert order_run1 == order_run2
+
+
 # ---------------------------------------------------------------------------
 # WeatherWriter integration
 # ---------------------------------------------------------------------------

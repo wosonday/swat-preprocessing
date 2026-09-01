@@ -58,7 +58,7 @@ def compute_wgn_stats(
     rhum_wide   = daily.get("humidity")
     wind_wide   = daily.get("wind")
 
-    station_ids = list(
+    station_ids = sorted(
         set(precip_wide.columns if precip_wide is not None else [])
         | set(tmax_wide.columns if tmax_wide is not None else [])
     )

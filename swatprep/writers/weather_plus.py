@@ -169,7 +169,10 @@ class SWATPlusWeatherWriter:
         # weather-sta.cli / weather-wgn.cli -- the linking files SWAT+ actually
         # reads to resolve each station's climate data.
         if not self.result.wgn_stats.empty:
-            sids = list(self.result.wgn_stats["station_id"].unique())
+            # wgn_stats is built from a sorted station_id list (compute_wgn_stats),
+            # so .unique() already preserves sorted order; sorted() here is
+            # defense in depth to guarantee deterministic output regardless.
+            sids = sorted(self.result.wgn_stats["station_id"].unique())
             wgn_names = self._assign_wgn_names(stations, sids)
             written.append(_write_weather_wgn(out, self.result.wgn_stats, stations, wgn_names, global_nbyr, ts))
             written.append(_write_weather_sta(out, station_files, wgn_names, ts))
