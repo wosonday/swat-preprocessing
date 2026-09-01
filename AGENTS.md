@@ -68,7 +68,11 @@ CLI: `swatprep convert weather --pcp-master ... --pcp-dir ... --tmp-master ...
 `TmpConverter`/`SWATPlusWeatherConverter` classes they used, which no longer
 exist.
 
-All converters return typed result objects with `files_written` and `qa: list[QACheck]`.
+Most converters return typed result objects with `files_written` and
+`qa: list[QACheck]`. `StationWeatherConverter` is the exception — it only
+reads raw station files and returns a `WeatherResult` (no `files_written`;
+still has `.qa`), since writing is delegated to `WeatherWriter`/
+`SWATPlusWeatherWriter`.
 
 ## SWAT File Format Notes
 

@@ -85,8 +85,9 @@ If your daily files are named by station **name** (e.g. `StationA.csv`), set
 `file_pattern: "{name}.csv"`.
 
 > Output file names are always derived from the station **name**, regardless of
-> `file_pattern`. When two stations share a name, the second gets a
-> `{name}_{id}` suffix so files never overwrite each other.
+> `file_pattern`. `SWATPlusWeatherWriter` (SWAT+ output) dedups a shared name
+> with a `{name}_{id}` suffix. `WeatherWriter` (SWAT Classic output) does
+> **not** dedup — two stations sharing a name will overwrite one file.
 
 ---
 

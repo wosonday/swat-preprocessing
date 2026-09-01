@@ -964,12 +964,13 @@ written = WeatherWriter(weather_result, output_dir / "weather").write()
 | `master_tmp.txt` | Metadata trạm temperature (chỉ các trạm đã ghi file dữ liệu) |
 | `wgn.csv` | Weather Generator parameters (14 cols × n_stations × 12 tháng) |
 
-> Tên file output lấy từ cột `name` của trạm. Trạm trùng tên sẽ được thêm hậu tố
-> `_{id}` để tránh ghi đè.
+> Tên file output lấy từ cột `name` của trạm. `WeatherWriter` (SWAT Classic)
+> KHÔNG thêm hậu tố khi hai trạm trùng tên — file sau sẽ ghi đè file trước.
+> (`SWATPlusWeatherWriter` cho SWAT+ có dedup, thêm hậu tố `_{id}`.)
 
-**Định dạng SWAT Classic `pcp_StationA.txt`:**
+**Định dạng SWAT Classic `pcp_StationA.txt`:** (dòng 1 là ngày bản ghi đầu tiên, không lệch ngày)
 ```
-19991231
+20000101
 0.0
 5.2
 0.0
@@ -977,7 +978,7 @@ written = WeatherWriter(weather_result, output_dir / "weather").write()
 
 **Định dạng SWAT Classic `tmp_StationA.txt`** (`tmin,tmax` mỗi dòng):
 ```
-19991231
+20000101
 22.0,30.1
 20.0,29.5
 ```

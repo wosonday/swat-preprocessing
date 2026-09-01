@@ -33,7 +33,7 @@ python -m pytest -v
 
 **Kết quả mong đợi:**
 ```
-135 passed, 3 skipped in ~3s
+136 passed, 3 skipped in ~3s
 ```
 
 3 test skip là do yêu cầu `rasterio` (cài với `pip install -e ".[geo]"`).
