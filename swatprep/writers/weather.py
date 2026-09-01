@@ -133,5 +133,6 @@ def _write_tmp(path: Path, tmax: pd.Series, tmin: pd.Series | None) -> None:
             tn = tn_val if pd.notna(tn_val) else -99.0
         else:
             tn = -99.0
+        # Real SWAT2012 vendor convention writes tmin,tmax per line (not tmax,tmin).
         lines.append(f"{_fmt_value(tn)},{_fmt_value(tx)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
