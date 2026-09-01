@@ -238,7 +238,7 @@ def _make_per_station_dir(tmp_path: Path, n_stations: int = 2, n_days: int = 3) 
     dates = ["2000-01-%02d" % (day + 1) for day in range(n_days)]
     for i in range(1, n_stations + 1):
         df = pd.DataFrame({"date": dates, "discharge": [float(i) * 10] * n_days})
-        df.to_csv(d / ("GAUGE_%04d.csv" % i), index=False)
+        df.to_csv(d / ("GAUGE%02d.csv" % i), index=False)
     return d
 
 
@@ -249,7 +249,7 @@ class TestStreamflowConverterPerStation:
         src = _make_per_station_dir(tmp_path, n_stations=2)
         out = tmp_path / "long.csv"
         result = StreamflowConverter(
-            src, input_format="per_station", glob_pattern="Q_*.csv"
+            src, input_format="per_station", glob_pattern="GAUGE*.csv"
         ).convert(out)
         assert result.n_stations == 2
 
@@ -258,7 +258,9 @@ class TestStreamflowConverterPerStation:
 
         src = _make_per_station_dir(tmp_path)
         out = tmp_path / "long.csv"
-        result = StreamflowConverter(src, input_format="per_station").convert(out)
+        result = StreamflowConverter(
+            src, input_format="per_station", glob_pattern="GAUGE*.csv"
+        ).convert(out)
         assert result.out_path.exists()
 
     def test_long_format_columns(self, tmp_path):
@@ -266,7 +268,9 @@ class TestStreamflowConverterPerStation:
 
         src = _make_per_station_dir(tmp_path)
         out = tmp_path / "long.csv"
-        StreamflowConverter(src, input_format="per_station").convert(out)
+        StreamflowConverter(
+            src, input_format="per_station", glob_pattern="GAUGE*.csv"
+        ).convert(out)
         df = pd.read_csv(out)
         assert "date" in df.columns
         assert "station_id" in df.columns
@@ -278,7 +282,9 @@ class TestStreamflowConverterPerStation:
 
         src = _make_per_station_dir(tmp_path)
         out = tmp_path / "long.csv"
-        result = StreamflowConverter(src, input_format="per_station").convert(out)
+        result = StreamflowConverter(
+            src, input_format="per_station", glob_pattern="GAUGE*.csv"
+        ).convert(out)
         assert failures(result.qa) == []
 
     def test_station_ids_match_filenames(self, tmp_path):
@@ -286,7 +292,9 @@ class TestStreamflowConverterPerStation:
 
         src = _make_per_station_dir(tmp_path, n_stations=2)
         out = tmp_path / "long.csv"
-        result = StreamflowConverter(src, input_format="per_station").convert(out)
+        result = StreamflowConverter(
+            src, input_format="per_station", glob_pattern="GAUGE*.csv"
+        ).convert(out)
         assert set(result.stations) == {"GAUGE01", "GAUGE02"}
 
     def test_single_file_per_station_mode(self, tmp_path):
