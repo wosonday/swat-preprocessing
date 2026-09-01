@@ -108,12 +108,10 @@ swatprep convert climate DATA_DIR OUT_DIR
 # Wide or per-station streamflow → long-format CSV
 swatprep convert streamflow SOURCE OUT_PATH
 
-# Raw precipitation / temperature → SWAT 2012 (Classic) .pcp / .tmp
-swatprep convert pcp MASTER_PATH DATA_DIR OUT_DIR
-swatprep convert tmp MASTER_PATH DATA_DIR OUT_DIR
-
-# SWAT Classic pcp + tmp → SWAT+ weather files (.pcp/.tmp + pcp.cli/tmp.cli)
-swatprep convert swatplus MASTER_PATH PCP_DIR TMP_DIR OUT_DIR
+# Raw station files (SWAT Classic style or CSV) → SWAT2012 and/or SWAT+
+swatprep convert weather --pcp-master MASTER.txt --pcp-dir DATA_DIR \
+                         --tmp-master MASTER.txt --tmp-dir DATA_DIR \
+                         --target swat2012 --target swatplus OUT_DIR
 ```
 
 Use converters to *prepare* raw data into per-station CSVs, then point
@@ -206,7 +204,9 @@ output/
   weather/
     StationA.pcp     # SWAT+ daily precipitation (year/doy rows)
     StationA.tmp     # SWAT+ daily temperature
-    pcp.cli tmp.cli  # SWAT+ index files
+    pcp.cli tmp.cli  # SWAT+ per-variable index files
+    weather-sta.cli  # SWAT+ station registry
+    weather-wgn.cli  # SWAT+ WGN statistics
     wgn.csv
     stations.csv
   observed/
@@ -215,10 +215,12 @@ output/
 ```
 
 The **weather** format follows `project.targets`: `swatplus` (default) writes
-SWAT+ daily files plus `*.cli` indexes; `swat` writes SWAT Classic
-value-per-line `.pcp/.tmp`; listing both writes each format into its own
-`weather/swatplus/` and `weather/swat/` sub-directory. Output file names come
-from the station `name` column. See
+SWAT+ daily files plus per-variable `*.cli` indexes and the `weather-sta.cli`/
+`weather-wgn.cli` linking files; `swat` writes SWAT Classic
+`pcp_<name>.txt`/`tmp_<name>.txt` (no header block, un-offset start date)
+plus `master_pcp.txt`/`master_tmp.txt`; listing both writes each format into
+its own `weather/swatplus/` and `weather/swat/` sub-directory. Output file
+names come from the station `name` column. See
 [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) for the full reference,
 including the `file_pattern` input-naming option (default `{id}.csv`) and split
 precip/temp sources.

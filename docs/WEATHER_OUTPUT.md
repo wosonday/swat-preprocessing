@@ -31,8 +31,8 @@ project:
 
 | `targets` value | Weather writer | Files |
 |---|---|---|
-| `swatplus` (default) | `SWATPlusWeatherWriter` | `.pcp/.tmp/.hmd/.slr/.wnd` (with `year day value` rows) + `*.cli` index files |
-| `swat` | `WeatherWriter` | SWAT Classic `.pcp/.tmp` (value-per-line) |
+| `swatplus` (default) | `SWATPlusWeatherWriter` | `.pcp/.tmp/.hmd/.slr/.wnd` (with `year day value` rows) + per-variable `*.cli` index files + `weather-sta.cli`/`weather-wgn.cli` |
+| `swat` | `WeatherWriter` | SWAT Classic `pcp_<name>.txt`/`tmp_<name>.txt` (no header block, un-offset start date) + `master_pcp.txt`/`master_tmp.txt` |
 | both | both writers | each format in its own sub-directory (see [layout](#output-directory-layout)) |
 
 `targets` defaults to `["swatplus"]`. If it is empty, `build()` falls back to
@@ -85,8 +85,9 @@ If your daily files are named by station **name** (e.g. `StationA.csv`), set
 `file_pattern: "{name}.csv"`.
 
 > Output file names are always derived from the station **name**, regardless of
-> `file_pattern`. When two stations share a name, the second gets a
-> `{name}_{id}` suffix so files never overwrite each other.
+> `file_pattern`. `SWATPlusWeatherWriter` (SWAT+ output) dedups a shared name
+> with a `{name}_{id}` suffix. `WeatherWriter` (SWAT Classic output) does
+> **not** dedup — two stations sharing a name will overwrite one file.
 
 ---
 
@@ -117,8 +118,11 @@ Rules:
 - Set the top-level `stations` + `data_dir` **or** a per-group `precip` / `temp`
   block for each variable group you use. Validation fails otherwise.
 - A per-group block overrides the top-level default for that group only.
-- In split mode the writer also emits `precip_stations.csv` and
-  `temp_stations.csv` alongside the union `stations.csv`.
+- In split mode the SWAT Classic writer builds `master_pcp.txt` from the
+  precip station group and `master_tmp.txt` from the temperature station
+  group (each restricted to the stations whose data file was actually
+  written); the SWAT+ writer still lists all stations in the union
+  `stations.csv`.
 
 > **Caveat:** split mode currently loads only `precip`, `tmax`, and `tmin`.
 > `humidity`, `solar`, and `wind` are read only in unified mode (single
@@ -160,36 +164,52 @@ StationA.pcp
 StationB.pcp
 ```
 
-Missing values are written as `-99.0`. `wgn.csv` (weather-generator monthly
-statistics) and `stations.csv` are written for reference.
+Two additional "linking" files are written after the per-variable data and
+`.cli` files -- these are what a SWAT+ `TxtInOut` folder actually reads to
+resolve each station's climate data, and without them the output cannot be
+dropped into a `TxtInOut` folder as-is:
+
+- **`weather-sta.cli`** — one row per station: `name`, `wgn` (its WGN group
+  name), then `pcp`/`tmp`/`slr`/`hmd`/`wnd` (the written data file's stem if
+  that variable was written for the station, else `"sim"`), and `pet`/
+  `atmo_dep` (always `"null"` — not computed by swatprep).
+- **`weather-wgn.cli`** — the weather-generator statistics in SWAT+'s fixed
+  format: one WGN group per station (group name = station name), each a
+  3-line header (title, group header with lat/lon/elev/nbyr, column header)
+  followed by 12 monthly rows built from `WeatherResult.wgn_stats`.
+
+Missing values are written as `-99.0`. `wgn.csv` (the same WGN statistics in
+csv-friendly form) and `stations.csv` are also written for reference.
 
 ---
 
-## SWAT Classic output format
+## SWAT Classic (SWAT2012) output format
 
-One file per station per variable, with a 4-line header, a start-date line
-(the day **before** the first record), and one value per line:
+One file per station per variable, **no metadata header block** -- just a
+start-date line (the date of the **first** data record, not offset) followed
+by one row per day. Station metadata lives in a separate master file, not in
+each per-station file. This mirrors the real SWAT2012 vendor-data convention.
 
-**`StationA.pcp`**
+**`pcp_StationA.txt`**
 ```text
-Precipitation data: StationA
-Lati      15.500
-Long     105.200
-Elev     120.000
-19991231
-     0.000
-     5.200
+20000101
+0.0
+5.2
 ```
 
-**`StationA.tmp`** (tmax and tmin, `%10.3f` each)
+**`tmp_StationA.txt`** (`tmin,tmax` per line)
 ```text
-Temperature data: StationA
-Lati      15.500
-Long     105.200
-Elev     120.000
-19991231
-    32.500    22.000
-    28.300    20.500
+20000101
+22.0,32.5
+20.0,28.3
+```
+
+**`master_pcp.txt`** / **`master_tmp.txt`** (one row per station, uppercase
+columns, `NAME` carries the domain prefix):
+```text
+ID,NAME,LAT,LONG,ELEVATION
+1,pcp_StationA,15.5,105.2,120.0
+2,pcp_StationB,15.8,105.6,95.0
 ```
 
 ---
@@ -198,14 +218,14 @@ Elev     120.000
 
 | `variables` entry | SWAT+ file | `.cli` index | SWAT Classic file |
 |---|---|---|---|
-| `precip` | `<name>.pcp` | `pcp.cli` | `<name>.pcp` |
-| `tmax` + `tmin` | `<name>.tmp` | `tmp.cli` | `<name>.tmp` |
+| `precip` | `<name>.pcp` | `pcp.cli` | `pcp_<name>.txt` |
+| `tmax` + `tmin` | `<name>.tmp` | `tmp.cli` | `tmp_<name>.txt` |
 | `humidity` | `<name>.hmd` | `hmd.cli` | — |
 | `solar` | `<name>.slr` | `slr.cli` | — |
 | `wind` | `<name>.wnd` | `wnd.cli` | — |
 
-The SWAT Classic writer only emits `.pcp` and `.tmp`; humidity/solar/wind are
-carried into the SWAT+ output and `wgn.csv` only.
+The SWAT Classic writer only emits `pcp_<name>.txt` and `tmp_<name>.txt`;
+humidity/solar/wind are carried into the SWAT+ output and `wgn.csv` only.
 
 ---
 
@@ -219,6 +239,7 @@ output/weather/
   StationA.pcp   StationA.tmp
   StationB.pcp   StationB.tmp
   pcp.cli        tmp.cli
+  weather-sta.cli   weather-wgn.cli
   wgn.csv        stations.csv
 ```
 
@@ -228,9 +249,12 @@ sub-directory so identically named files don't collide:
 ```text
 output/weather/
   swatplus/
-    StationA.pcp   StationA.tmp   pcp.cli   tmp.cli   wgn.csv   stations.csv
+    StationA.pcp   StationA.tmp   pcp.cli   tmp.cli
+    weather-sta.cli   weather-wgn.cli   wgn.csv   stations.csv
   swat/
-    StationA.pcp   StationA.tmp   wgn.csv   stations.csv
+    pcp_StationA.txt   tmp_StationA.txt
+    pcp_StationB.txt   tmp_StationB.txt
+    master_pcp.txt   master_tmp.txt   wgn.csv
 ```
 
 ---
@@ -263,9 +287,10 @@ Two different entry points can produce SWAT+/Classic weather files:
 - **`swatprep build`** (this document) — runs the full preprocessing pipeline
   from a config and writes weather output using the writers above.
 - **`swatprep convert ...`** — standalone converters that transform *raw*
-  vendor formats (e.g. Vietnamese `.day` files, SWAT Classic `.pcp/.tmp`) into
-  swatprep CSVs or directly into SWAT+ files, independent of the pipeline. See
-  the converter reference in `DEVELOPER_GUIDE.md` (§8b).
+  vendor formats (e.g. Vietnamese `.day` files, SWAT2012 vendor
+  `pcp_<name>.txt`/`tmp_<name>.txt` station files) into swatprep CSVs or
+  directly into SWAT+/SWAT2012 files, independent of the pipeline. See the
+  converter reference in `DEVELOPER_GUIDE.md` (§8b).
 
 Use converters to *prepare* raw data into per-station CSVs, then point
 `weather.data_dir` at those CSVs and run `build`.

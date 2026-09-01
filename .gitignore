@@ -30,6 +30,6 @@ env/
 # Local agent/tooling state
 .agents/
 .codex/
-
+.*/
 # Example outputs
 examples/output/

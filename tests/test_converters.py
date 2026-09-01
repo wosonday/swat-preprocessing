@@ -336,14 +336,14 @@ class TestCLIConvert:
 
     def test_python_m_cli_runs(self):
         res = subprocess.run(
-            [sys.executable, "-m", "swatprep.cli", "convert", "swatplus", "--help"],
+            [sys.executable, "-m", "swatprep.cli", "convert", "weather", "--help"],
             check=False,
             capture_output=True,
             text=True,
         )
 
         assert res.returncode == 0
-        assert "PCP_DIR" in res.stdout
+        assert "--pcp-master" in res.stdout
 
     def test_cli_convert_climate_runs(self, tmp_path):
         from click.testing import CliRunner
@@ -371,82 +371,110 @@ class TestCLIConvert:
         assert res.exit_code == 0, res.output
         assert "Stations" in res.output
 
-    def test_cli_convert_pcp_runs(self, tmp_path):
+    def test_cli_convert_weather_swat2012(self, tmp_path):
         from click.testing import CliRunner
         from swatprep.cli import main
 
         master = tmp_path / "master_pcp.txt"
         pd.DataFrame([{
-            "ID": 1,
-            "NAME": "pcp_ALPHA",
-            "LAT": 13.95,
-            "LONG": 108.65,
-            "ELEVATION": 416,
+            "ID": 1, "NAME": "pcp_ALPHA", "LAT": 13.95, "LONG": 108.65, "ELEVATION": 416,
         }]).to_csv(master, index=False)
-        pd.DataFrame({
-            "date": ["2000-01-01", "2000-01-02"],
-            "Rain": [1.0, 2.0],
-        }).to_csv(tmp_path / "R_ALPHA.day", index=False)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "pcp_ALPHA.txt").write_text("20000101\n0.0\n0.3\n1.5\n", encoding="utf-8")
 
-        out = tmp_path / "pcp_out"
-        runner = CliRunner()
-        res = runner.invoke(main, ["convert", "pcp", str(master), str(tmp_path), str(out)])
-
-        assert res.exit_code == 0, res.output
-        assert (out / "pcp_ALPHA.pcp").exists()
-
-    def test_cli_convert_tmp_runs(self, tmp_path):
-        from click.testing import CliRunner
-        from swatprep.cli import main
-
-        master = tmp_path / "master_tmp.txt"
-        pd.DataFrame([{
-            "ID": 1,
-            "NAME": "tmp_ALPHA",
-            "LAT": 13.95,
-            "LONG": 108.65,
-            "ELEVATION": 416,
-        }]).to_csv(master, index=False)
-        pd.DataFrame({
-            "date": ["2000-01-01", "2000-01-02"],
-            "tmax": [30.0, 31.0],
-            "tmin": [20.0, 21.0],
-        }).to_csv(tmp_path / "tmp_ALPHA.txt", index=False)
-
-        out = tmp_path / "tmp_out"
-        runner = CliRunner()
-        res = runner.invoke(main, ["convert", "tmp", str(master), str(tmp_path), str(out)])
-
-        assert res.exit_code == 0, res.output
-        assert (out / "tmp_ALPHA.tmp").exists()
-
-    def test_cli_convert_swatplus_runs(self, tmp_path):
-        from click.testing import CliRunner
-        from swatprep.cli import main
-
-        master = tmp_path / "master_pcp.txt"
-        pd.DataFrame([{
-            "ID": 1,
-            "NAME": "pcp_ALPHA",
-            "LAT": 13.95,
-            "LONG": 108.65,
-            "ELEVATION": 416,
-        }]).to_csv(master, index=False)
-
-        pcp_dir = tmp_path / "pcp"
-        tmp_dir = tmp_path / "tmp"
-        pcp_dir.mkdir()
-        tmp_dir.mkdir()
-        (pcp_dir / "pcp_ALPHA.txt").write_text("20000101\n     1.000\n     2.000\n", encoding="utf-8")
-        (tmp_dir / "tmp_ALPHA.txt").write_text("20000101\n20.0,30.0\n21.0,31.0\n", encoding="utf-8")
-
-        out = tmp_path / "swatplus"
+        out = tmp_path / "out"
         runner = CliRunner()
         res = runner.invoke(
             main,
-            ["convert", "swatplus", str(master), str(pcp_dir), str(tmp_dir), str(out)],
+            ["convert", "weather", "--pcp-master", str(master), "--pcp-dir", str(raw_dir),
+             "--target", "swat2012", str(out)],
         )
 
         assert res.exit_code == 0, res.output
-        assert (out / "alpha.pcp").exists()
-        assert (out / "alpha.tmp").exists()
+        assert (out / "pcp_ALPHA.txt").exists()
+        assert (out / "master_pcp.txt").exists()
+
+    def test_cli_convert_weather_swat_alias(self, tmp_path):
+        """--target swat is an alias for --target swat2012 and produces the
+        same SWAT2012 output."""
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        master = tmp_path / "master_pcp.txt"
+        pd.DataFrame([{
+            "ID": 1, "NAME": "pcp_ALPHA", "LAT": 13.95, "LONG": 108.65, "ELEVATION": 416,
+        }]).to_csv(master, index=False)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "pcp_ALPHA.txt").write_text("20000101\n0.0\n0.3\n1.5\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(
+            main,
+            ["convert", "weather", "--pcp-master", str(master), "--pcp-dir", str(raw_dir),
+             "--target", "swat", str(out)],
+        )
+
+        assert res.exit_code == 0, res.output
+        assert (out / "pcp_ALPHA.txt").exists()
+        assert (out / "master_pcp.txt").exists()
+
+    def test_cli_convert_weather_swatplus(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        master = tmp_path / "master_pcp.txt"
+        pd.DataFrame([{
+            "ID": 1, "NAME": "pcp_ALPHA", "LAT": 13.95, "LONG": 108.65, "ELEVATION": 416,
+        }]).to_csv(master, index=False)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "pcp_ALPHA.txt").write_text("20000101\n0.0\n0.3\n1.5\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(
+            main,
+            ["convert", "weather", "--pcp-master", str(master), "--pcp-dir", str(raw_dir),
+             "--target", "swatplus", str(out)],
+        )
+
+        assert res.exit_code == 0, res.output
+        assert (out / "pcp.cli").exists()
+        assert (out / "weather-sta.cli").exists()
+        assert (out / "weather-wgn.cli").exists()
+
+    def test_cli_convert_weather_both_targets_use_subdirs(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        master = tmp_path / "master_pcp.txt"
+        pd.DataFrame([{
+            "ID": 1, "NAME": "pcp_ALPHA", "LAT": 13.95, "LONG": 108.65, "ELEVATION": 416,
+        }]).to_csv(master, index=False)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "pcp_ALPHA.txt").write_text("20000101\n0.0\n0.3\n1.5\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(
+            main,
+            ["convert", "weather", "--pcp-master", str(master), "--pcp-dir", str(raw_dir),
+             "--target", "swat2012", "--target", "swatplus", str(out)],
+        )
+
+        assert res.exit_code == 0, res.output
+        assert (out / "swat2012" / "pcp_ALPHA.txt").exists()
+        assert (out / "swatplus" / "pcp.cli").exists()
+
+    def test_cli_convert_weather_requires_one_group(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        runner = CliRunner()
+        res = runner.invoke(main, ["convert", "weather", str(tmp_path / "out")])
+
+        assert res.exit_code != 0
