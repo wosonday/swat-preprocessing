@@ -395,6 +395,32 @@ class TestCLIConvert:
         assert (out / "pcp_ALPHA.txt").exists()
         assert (out / "master_pcp.txt").exists()
 
+    def test_cli_convert_weather_swat_alias(self, tmp_path):
+        """--target swat is an alias for --target swat2012 and produces the
+        same SWAT2012 output."""
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        master = tmp_path / "master_pcp.txt"
+        pd.DataFrame([{
+            "ID": 1, "NAME": "pcp_ALPHA", "LAT": 13.95, "LONG": 108.65, "ELEVATION": 416,
+        }]).to_csv(master, index=False)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        (raw_dir / "pcp_ALPHA.txt").write_text("20000101\n0.0\n0.3\n1.5\n", encoding="utf-8")
+
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(
+            main,
+            ["convert", "weather", "--pcp-master", str(master), "--pcp-dir", str(raw_dir),
+             "--target", "swat", str(out)],
+        )
+
+        assert res.exit_code == 0, res.output
+        assert (out / "pcp_ALPHA.txt").exists()
+        assert (out / "master_pcp.txt").exists()
+
     def test_cli_convert_weather_swatplus(self, tmp_path):
         from click.testing import CliRunner
         from swatprep.cli import main

@@ -292,9 +292,10 @@ def convert_streamflow(
 @click.option("--tmp-dir", type=click.Path(exists=True, path_type=Path), default=None,
               help="Directory containing raw temperature station files.")
 @click.option("--target", "targets", multiple=True,
-              type=click.Choice(["swat2012", "swatplus"]), default=("swat2012",),
+              type=click.Choice(["swat2012", "swat", "swatplus"]), default=("swat2012",),
               show_default=True,
-              help="Output format to write. Repeatable, e.g. --target swat2012 --target swatplus.")
+              help="Output format to write: 'swat2012' (alias 'swat') or 'swatplus'. "
+                   "Repeatable, e.g. --target swat2012 --target swatplus.")
 @click.argument("out_dir", type=click.Path(path_type=Path))
 def convert_weather(
     pcp_master: Path | None,
@@ -319,6 +320,9 @@ def convert_weather(
     """
     from .converters.station_weather import StationWeatherConverter
     from .qa import failures, warnings
+
+    # "swat" is an alias for "swat2012" -- same writer, same output.
+    targets = tuple("swat2012" if t == "swat" else t for t in targets)
 
     converter = StationWeatherConverter(
         pcp_master=pcp_master, pcp_dir=pcp_dir,
