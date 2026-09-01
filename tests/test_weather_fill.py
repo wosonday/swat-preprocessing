@@ -497,9 +497,9 @@ class TestCLIFillWeather:
             str(out),
         ])
 
-        assert res.exit_code != 0
         assert res.exit_code == 1
-        assert "Traceback" not in res.output
+        assert res.exception is None or isinstance(res.exception, SystemExit)
+        assert "Config schema error" in res.output
 
     def test_cli_fill_weather_end_before_start_fails_cleanly(self, tmp_path):
         from click.testing import CliRunner
@@ -518,6 +518,7 @@ class TestCLIFillWeather:
             str(out),
         ])
 
-        assert res.exit_code != 0
         assert res.exit_code == 1
-        assert "Traceback" not in res.output
+        assert res.exception is None or isinstance(res.exception, SystemExit)
+        assert "Config schema error" in res.output
+        assert "weather.end must be on or after weather.start" in res.output
