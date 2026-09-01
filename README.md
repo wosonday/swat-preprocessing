@@ -204,7 +204,9 @@ output/
   weather/
     StationA.pcp     # SWAT+ daily precipitation (year/doy rows)
     StationA.tmp     # SWAT+ daily temperature
-    pcp.cli tmp.cli  # SWAT+ index files
+    pcp.cli tmp.cli  # SWAT+ per-variable index files
+    weather-sta.cli  # SWAT+ station registry
+    weather-wgn.cli  # SWAT+ WGN statistics
     wgn.csv
     stations.csv
   observed/
@@ -213,10 +215,12 @@ output/
 ```
 
 The **weather** format follows `project.targets`: `swatplus` (default) writes
-SWAT+ daily files plus `*.cli` indexes; `swat` writes SWAT Classic
-value-per-line `.pcp/.tmp`; listing both writes each format into its own
-`weather/swatplus/` and `weather/swat/` sub-directory. Output file names come
-from the station `name` column. See
+SWAT+ daily files plus per-variable `*.cli` indexes and the `weather-sta.cli`/
+`weather-wgn.cli` linking files; `swat` writes SWAT Classic
+`pcp_<name>.txt`/`tmp_<name>.txt` (no header block, un-offset start date)
+plus `master_pcp.txt`/`master_tmp.txt`; listing both writes each format into
+its own `weather/swatplus/` and `weather/swat/` sub-directory. Output file
+names come from the station `name` column. See
 [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) for the full reference,
 including the `file_pattern` input-naming option (default `{id}.csv`) and split
 precip/temp sources.
