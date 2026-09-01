@@ -256,3 +256,85 @@ class TestWeatherGapFillerOverlapEdgeCases:
         assert row["status"] == "warn"
 
         assert any("S2" in c.message and "no fill source" in c.message for c in warnings(result.qa))
+
+
+class TestWeatherFillWriter:
+    def _build_result(self, tmp_path):
+        from swatprep.config import WeatherConfig
+        from swatprep.core.weather_fill import WeatherGapFiller
+
+        real_sta = _write_stations_csv(tmp_path, "real_stations.csv", [{"id": "S1", **_META}])
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        dates = ["2000-01-01", "2000-01-02", "2000-01-03"]
+        _write_station_csv(real_dir, "S1", dates, precip=[2.0, None, 4.0])
+
+        fill_sta = _write_stations_csv(tmp_path, "fill_stations.csv", [{"id": "S1", **_META}])
+        fill_dir = tmp_path / "fill"
+        fill_dir.mkdir()
+        _write_station_csv(fill_dir, "S1", dates, precip=[1.0, 5.0, 2.0])
+
+        real_cfg = WeatherConfig(
+            stations=real_sta, data_dir=real_dir, variables=["precip"],
+            start="2000-01-01", end="2000-01-03", missing_policy="warn",
+        )
+        fill_cfg = WeatherConfig(
+            stations=fill_sta, data_dir=fill_dir, variables=["precip"],
+            start="2000-01-01", end="2000-01-03", missing_policy="warn",
+        )
+        return WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=1).run()
+
+    def test_writes_stations_station_files_and_report(self, tmp_path):
+        from swatprep.writers.weather_fill import WeatherFillWriter
+
+        result = self._build_result(tmp_path)
+        out = tmp_path / "out"
+        written = WeatherFillWriter(result, out).write()
+
+        assert (out / "stations.csv") in written
+        assert (out / "S1.csv") in written
+        assert (out / "fill_report.csv") in written
+
+    def test_station_csv_format_matches_native_convention(self, tmp_path):
+        from swatprep.writers.weather_fill import WeatherFillWriter
+
+        result = self._build_result(tmp_path)
+        out = tmp_path / "out"
+        WeatherFillWriter(result, out).write()
+
+        df = pd.read_csv(out / "S1.csv")
+        assert list(df.columns) == ["date", "precip"]
+        assert df["date"].iloc[0] == "2000-01-01"
+        assert df["precip"].iloc[0] == 2.0
+        assert df["precip"].iloc[1] == pytest.approx(10.0)  # filled value
+
+    def test_stations_csv_has_native_columns(self, tmp_path):
+        from swatprep.writers.weather_fill import WeatherFillWriter
+
+        result = self._build_result(tmp_path)
+        out = tmp_path / "out"
+        WeatherFillWriter(result, out).write()
+
+        df = pd.read_csv(out / "stations.csv")
+        assert list(df.columns) == ["id", "name", "lat", "lon", "elev"]
+        assert df["id"].iloc[0] == "S1"
+
+    def test_round_trip_loadable_by_weather_preprocessor(self, tmp_path):
+        from swatprep.config import WeatherConfig
+        from swatprep.core.weather import WeatherPreprocessor
+        from swatprep.writers.weather_fill import WeatherFillWriter
+        from swatprep.qa import failures
+
+        result = self._build_result(tmp_path)
+        out = tmp_path / "out"
+        WeatherFillWriter(result, out).write()
+
+        reload_cfg = WeatherConfig(
+            stations=out / "stations.csv", data_dir=out, variables=["precip"],
+            start="2000-01-01", end="2000-01-03", missing_policy="fail",
+        )
+        reloaded = WeatherPreprocessor(reload_cfg).run()
+
+        assert failures(reloaded.qa) == []
+        precip = reloaded.daily["precip"]["S1"]
+        assert precip.isna().sum() == 0  # the filled day introduced no new gap
