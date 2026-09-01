@@ -170,17 +170,17 @@ swat-preprocessing/
 │   │   ├── soil.py
 │   │   ├── weather.py
 │   │   └── streamflow.py
-│   ├── converters/         # Pre-processing layer (raw Vietnamese data → SWAT inputs)
+│   ├── converters/         # Pre-processing layer (raw Vietnamese/vendor data → SWAT inputs)
 │   │   ├── __init__.py     # public exports for all converters
 │   │   ├── climate.py      # DayFilesConverter (merge .day files → per-station CSV)
-│   │   ├── swat2012.py     # PCPConverter + TmpConverter (.pcp/.tmp)
-│   │   ├── weather_plus.py # SWATPlusWeatherConverter (SWAT+ format)
+│   │   ├── station_weather.py # StationWeatherConverter (raw pcp/tmp master+data → WeatherResult)
 │   │   └── streamflow.py   # StreamflowConverter
 │   ├── writers/            # Writers (serialize to files)
 │   │   ├── spatial.py      # DEM → dem_info.json
 │   │   ├── landuse.py      # LandUse → CSV files
 │   │   ├── soil.py         # Soil → usersoil.csv
-│   │   ├── weather.py      # Weather → .pcp / .tmp / wgn.csv
+│   │   ├── weather.py      # WeatherWriter → SWAT2012 pcp_<name>.txt/tmp_<name>.txt + master files
+│   │   ├── weather_plus.py # SWATPlusWeatherWriter → SWAT+ .pcp/.tmp/.cli + weather-sta.cli/weather-wgn.cli
 │   │   ├── observations.py # Streamflow → streamflow_{id}.csv
 │   │   └── manifest.py     # manifest.json + qa_report.md
 │   └── utils/
@@ -191,9 +191,9 @@ swat-preprocessing/
     ├── test_qa.py
     ├── test_api.py
     ├── test_converters.py   # DayFilesConverter, StreamflowConverter, CLI
-    ├── test_pcp_converter.py  # PCPConverter (SWAT 2012)
-    ├── test_weather_plus.py   # SWATPlusWeatherConverter
+    ├── test_station_weather_converter.py  # StationWeatherConverter (SWAT2012 raw + CSV input)
     ├── test_weather.py
+    ├── test_weather_plus_writer.py  # SWATPlusWeatherWriter (data files + weather-sta.cli/weather-wgn.cli)
     ├── test_streamflow.py
     ├── test_landuse.py
     ├── test_soil.py
@@ -910,8 +910,8 @@ written = SoilWriter(soil_result, output_dir / "soil").write()
 
 | `targets` | Writer | File |
 |---|---|---|
-| `"swatplus"` (mặc định) | `SWATPlusWeatherWriter` (`writers/weather_plus.py`) | `.pcp/.tmp/.hmd/.slr/.wnd` + `*.cli` |
-| `"swat"` | `WeatherWriter` (`writers/weather.py`) | SWAT Classic `.pcp/.tmp` |
+| `"swatplus"` (mặc định) | `SWATPlusWeatherWriter` (`writers/weather_plus.py`) | `.pcp/.tmp/.hmd/.slr/.wnd` + `*.cli` + `weather-sta.cli`/`weather-wgn.cli` |
+| `"swat"` | `WeatherWriter` (`writers/weather.py`) | SWAT Classic `pcp_<name>.txt`/`tmp_<name>.txt` + `master_pcp.txt`/`master_tmp.txt` |
 | cả hai | cả hai | mỗi định dạng vào thư mục con `swatplus/` và `swat/` |
 
 > Xem [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) cho tham chiếu đầy đủ.
@@ -937,6 +937,12 @@ nbyr     tstep       lat       lon      elev
 2000    2    5.20000
 ```
 
+Sau các file dữ liệu và `.cli` theo biến, writer còn ghi hai file "linking"
+mà một `TxtInOut` thật sự đọc để phân giải dữ liệu khí hậu của từng trạm:
+`weather-sta.cli` (đăng ký trạm) và `weather-wgn.cli` (thống kê WGN theo
+định dạng cố định của SWAT+). Xem `docs/WEATHER_OUTPUT.md` để biết chi tiết
+cột.
+
 #### WeatherWriter (SWAT Classic)
 
 **File:** `swatprep/writers/weather.py`  
@@ -952,40 +958,35 @@ written = WeatherWriter(weather_result, output_dir / "weather").write()
 
 | File | Nội dung |
 |---|---|
-| `{name}.pcp` | SWAT Classic precipitation file |
-| `{name}.tmp` | SWAT Classic temperature file |
+| `pcp_{name}.txt` | SWAT Classic precipitation file |
+| `tmp_{name}.txt` | SWAT Classic temperature file |
+| `master_pcp.txt` | Metadata trạm precip (chỉ các trạm đã ghi file dữ liệu) — `ID,NAME,LAT,LONG,ELEVATION` |
+| `master_tmp.txt` | Metadata trạm temperature (chỉ các trạm đã ghi file dữ liệu) |
 | `wgn.csv` | Weather Generator parameters (14 cols × n_stations × 12 tháng) |
-| `stations.csv` | Metadata trạm |
 
 > Tên file output lấy từ cột `name` của trạm. Trạm trùng tên sẽ được thêm hậu tố
 > `_{id}` để tránh ghi đè.
 
-**Định dạng SWAT Classic `.pcp`:**
+**Định dạng SWAT Classic `pcp_StationA.txt`:**
 ```
-Precipitation data: StationA
-Lati      15.500
-Long     105.200
-Elev     120.000
 19991231
-     0.000
-     5.200
-     0.000
+0.0
+5.2
+0.0
 ```
 
-**Định dạng SWAT Classic `.tmp`:**
+**Định dạng SWAT Classic `tmp_StationA.txt`** (`tmin,tmax` mỗi dòng):
 ```
-Temperature data: StationA
-Lati      15.500
-Long     105.200
-Elev     120.000
 19991231
-    30.100    22.000
-    29.500    20.000
+22.0,30.1
+20.0,29.5
 ```
 
-> Header gồm 4 dòng: title, Lati, Long, Elev — mỗi giá trị `%12.3f` (3 chữ số thập phân).  
-> Dòng 5 là ngày đầu tiên có data (YYYYMMDD).  
-> Mỗi giá trị data chiếm 10 ký tự, 3 chữ số thập phân (`%10.3f`).
+> Không có header block metadata (không có title/Lati/Long/Elev) — metadata
+> trạm chỉ nằm trong `master_pcp.txt`/`master_tmp.txt`. Dòng 1 là ngày của
+> bản ghi dữ liệu **đầu tiên** (YYYYMMDD), không lệch ngày. Giá trị được ghi
+> gọn (không đệm độ rộng cố định), khớp quy ước dữ liệu vendor SWAT2012 thật.
+> Xem [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md) để biết chi tiết đầy đủ.
 
 ---
 
@@ -1058,9 +1059,11 @@ manifest_path, report_path = write_manifest(
 ## 8b. Converters Layer (Raw Data Pre-processing)
 
 The `converters/` package is a **separate pre-processing step** that runs
-*before* the main `build()` pipeline. It converts raw Vietnamese station data
-(`.day` files, master metadata CSVs) into the per-station CSV and SWAT 2012
-file formats that the pipeline can consume.
+*before* (or independently of) the main `build()` pipeline. It converts raw
+vendor/Vietnamese station data (`.day` files, SWAT Classic-style master +
+per-station files) into either per-station CSVs (`DayFilesConverter`) or a
+`WeatherResult` ready to hand to `WeatherWriter`/`SWATPlusWeatherWriter`
+(`StationWeatherConverter`).
 
 Converters do **not** appear in `api.py` / `build()`. They are called
 standalone, either via CLI or Python API.
@@ -1087,108 +1090,55 @@ print(result.files_written)     # [Path("merged/STATION01.csv"), ...]
 
 ---
 
-### PCPConverter and TmpConverter
+### StationWeatherConverter
 
-**File:** `swatprep/converters/swat2012.py`
+**File:** `swatprep/converters/station_weather.py`
 
-Both converters share a common base class (`_BaseStationConverter`) and are
-merged into one module. They read a master CSV for station metadata and write
-SWAT 2012 `.pcp` / `.tmp` files.
+Reads raw per-station weather files (SWAT Classic style, i.e. a
+`YYYYMMDD`-header + one-value-per-line `pcp_<name>.txt`/`tmp_<name>.txt`
+layout matching real vendor exports — or a `date` + variable-column CSV,
+auto-detected per station file) plus a pcp/tmp master metadata file, into a
+`WeatherResult` — the same type `WeatherPreprocessor` produces for the
+`build()` pipeline. It does **not** write any output files itself:
+*reading* raw vendor data is `StationWeatherConverter`'s only job; *writing*
+stays the sole responsibility of `WeatherWriter` (SWAT2012) /
+`SWATPlusWeatherWriter` (SWAT+), so there is one single source of truth per
+output format regardless of which entry point produced the `WeatherResult`.
 
-**Shared base class** handles:
-- `convert()` loop iterating over master rows
-- `_find_raw_file()` — case-insensitive file discovery
-- `_is_swat_format()` — auto-detects YYYYMMDD header vs CSV format
-- `_read_master()` — validates required columns
-- `_swat_header()` — generates 4-line header (name, Lati, Long, Elev)
-
-**PCPConverter-specific:** reads single precipitation column, writes `%10.3f` per line.
-
-**TmpConverter-specific:** reads tmax + tmin columns (respects `tmin_first`), writes `%10.3f%10.3f` per line.
-
-```python
-from swatprep.converters import PCPConverter, TmpConverter
-
-# Precipitation
-pcp = PCPConverter(
-    master_path=Path("master_pcp.txt"),
-    data_dir=Path("raw/"),
-    out_dir=Path("swat_pcp/"),
-).convert()
-
-print(pcp.files_written)   # [Path("swat_pcp/pcp_STATION01.pcp"), ...]
-print(pcp.unmatched)       # stations in master with no matching raw file
-
-# Temperature
-tmp = TmpConverter(
-    master_path=Path("master_tmp.txt"),
-    data_dir=Path("raw_tmp/"),
-    out_dir=Path("swat_tmp/"),
-    tmin_first=True,       # SWAT Classic input has tmin before tmax
-).convert()
-```
-
-**Result types** (unified — same for both converters):
+At least one of the `pcp_*` / `tmp_*` group must be given; the two groups are
+independent (you can convert precip only, temperature only, or both).
 
 ```python
-@dataclass
-class StationResult:
-    name: str; station: str; lat: float; lon: float; elev: float
-    out_path: Path | None; n_days: int; qa: list[QACheck]
+from swatprep.converters.station_weather import StationWeatherConverter
+from swatprep.writers.weather import WeatherWriter
+from swatprep.writers.weather_plus import SWATPlusWeatherWriter
 
-@dataclass
-class SWAT2012ConvertResult:
-    stations: list[StationResult]
-    files_written: list[Path]
-    unmatched: list[str]
-    qa: list[QACheck]
-```
-
-**Output format — `.pcp` file:**
-```
-pcp_STATION01
-Lati      15.00
-Long     105.00
-Elev     416.000
-19770101
-     0.000
-     5.500
-```
-
-**Output format — `.tmp` file:**
-```
-tmp_STATION01
-Lati      15.00
-Long     105.00
-Elev     416.000
-19770101
-    25.000    18.000
-```
-
-> Header fields use `%12.3f` (3 decimal places). Data values use `%10.3f`.
-
----
-
-### SWATPlusWeatherConverter
-
-**File:** `swatprep/converters/weather_plus.py`
-
-Converts per-station CSVs (from `DayFilesConverter`) into SWAT+ weather files.
-Uses vectorized numpy for data line formatting (no `iterrows()`).
-
-```python
-from swatprep.converters import SWATPlusWeatherConverter
-
-result = SWATPlusWeatherConverter(
-    data_dir=Path("merged/"),
-    out_dir=Path("swatplus/"),
-    metadata=Path("master_pcp.txt"),
+result = StationWeatherConverter(
+    pcp_master=Path("master_pcp.txt"),
+    pcp_dir=Path("raw_pcp/"),
+    tmp_master=Path("master_tmp.txt"),
+    tmp_dir=Path("raw_tmp/"),
 ).convert()
+
+WeatherWriter(result, Path("out/swat2012")).write()      # SWAT2012 format
+SWATPlusWeatherWriter(result, Path("out/swatplus")).write()  # SWAT+ format
 ```
 
-**Output:** `station01.pcp`, `station01.tmp`, `pcp.cli`, `tmp.cli`
+**CLI equivalent** — `swatprep convert weather` (replaces the removed
+`convert pcp` / `convert tmp` / `convert swatplus` commands):
 
-> Note: SWAT+ temperature files use `.tmp` extension (not `.tem`).
+```bash
+swatprep convert weather \
+  --pcp-master master_pcp.txt --pcp-dir ./raw_pcp \
+  --tmp-master master_tmp.txt --tmp-dir ./raw_tmp \
+  --target swat2012 --target swatplus \
+  OUT_DIR
+```
+
+`--target` accepts `swat2012` (or its alias `swat`) and/or `swatplus`, and
+may be repeated; with more than one target, each is written to its own
+`OUT_DIR/<target>/` subdirectory. See `swatprep/cli.py`'s `convert_weather`
+docstring for the exact option list.
 
 ---
 

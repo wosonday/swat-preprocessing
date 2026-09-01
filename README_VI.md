@@ -107,12 +107,12 @@ swatprep convert climate DATA_DIR OUT_DIR
 # Dòng chảy dạng wide hoặc per-station → CSV long-format
 swatprep convert streamflow SOURCE OUT_PATH
 
-# Mưa / nhiệt độ thô → SWAT 2012 (Classic) .pcp / .tmp
-swatprep convert pcp MASTER_PATH DATA_DIR OUT_DIR
-swatprep convert tmp MASTER_PATH DATA_DIR OUT_DIR
-
-# pcp + tmp (SWAT Classic) → file khí tượng SWAT+ (.pcp/.tmp + pcp.cli/tmp.cli)
-swatprep convert swatplus MASTER_PATH PCP_DIR TMP_DIR OUT_DIR
+# Mưa / nhiệt độ thô (SWAT Classic hoặc CSV) → SWAT2012 và/hoặc SWAT+
+swatprep convert weather \
+  --pcp-master master_pcp.txt --pcp-dir raw_pcp \
+  --tmp-master master_tmp.txt --tmp-dir raw_tmp \
+  --target swat2012 --target swatplus \
+  OUT_DIR
 ```
 
 Dùng converter để *chuẩn bị* dữ liệu thô thành CSV theo trạm, rồi trỏ

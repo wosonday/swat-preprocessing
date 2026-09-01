@@ -33,7 +33,7 @@ python -m pytest -v
 
 **Kết quả mong đợi:**
 ```
-129 passed, 3 skipped in ~3s
+135 passed, 3 skipped in ~3s
 ```
 
 3 test skip là do yêu cầu `rasterio` (cài với `pip install -e ".[geo]"`).
@@ -44,23 +44,19 @@ python -m pytest -v
 python -m pytest tests/test_qa.py -v              # QA checks cơ bản
 python -m pytest tests/test_config.py -v          # Config validation
 python -m pytest tests/test_converters.py -v      # DayFilesConverter, StreamflowConverter, CLI
-python -m pytest tests/test_pcp_converter.py -v   # PCPConverter (SWAT 2012 format)
-python -m pytest tests/test_weather_plus.py -v    # SWATPlusWeatherConverter (SWAT+)
+python -m pytest tests/test_station_weather_converter.py -v  # StationWeatherConverter (raw SWAT2012/CSV input)
+python -m pytest tests/test_weather_plus_writer.py -v  # SWATPlusWeatherWriter (SWAT+ data files + weather-sta.cli/weather-wgn.cli)
 python -m pytest tests/test_weather.py -v         # WeatherPreprocessor core
 python -m pytest tests/test_streamflow.py -v      # StreamflowPreprocessor core
 python -m pytest tests/test_dem.py tests/test_landuse.py tests/test_soil.py -v
 ```
 
-### 2.2 Chạy chỉ live tests (dùng dữ liệu thực)
+### 2.2 Live tests
 
-```bash
-python -m pytest -v -k "live"
-```
-
-Live tests trong dự án:
-- `test_live_station01` — đọc `R_STATION01.day` + `master_pcp.txt`, viết SWAT 2012 `.pcp`
-- `test_live_value_precision` — kiểm tra format số trong file thực
-- `test_live_pcp_header_and_format` — kiểm tra header SWAT+ từ `R_STATION01.day`
+Bộ test hiện tại không còn live test nào chạy trên dữ liệu thực ngoài repo
+(các live test trước đây thuộc `test_pcp_converter.py`/`test_weather_plus.py`,
+đã bị xoá cùng `PCPConverter`/`TmpConverter`/`SWATPlusWeatherConverter`). Toàn
+bộ test hiện dùng fixture tổng hợp trong `tests/conftest.py`.
 
 ---
 
@@ -117,9 +113,10 @@ print(f"Files: {len(result.files_written)}")
 
 ---
 
-### Bước 2a — SWAT 2012 `.pcp` files (PCPConverter)
+### Bước 2 — SWAT2012 và/hoặc SWAT+ weather files (StationWeatherConverter)
 
-**Input:** `master_pcp.txt` + thư mục `R_STATION.day`
+**Input:** `master_pcp.txt`/`master_tmp.txt` + thư mục file trạm thô
+(`pcp_STATION.txt`/`tmp_STATION.txt` kiểu SWAT Classic, hoặc CSV).
 
 Format `master_pcp.txt`:
 ```
@@ -128,79 +125,58 @@ ID,NAME,LAT,LONG,ELEVATION
 ```
 
 ```bash
-swatprep convert pcp master_pcp.txt raw_day_files/ swat_pcp/
+swatprep convert weather \
+  --pcp-master master_pcp.txt --pcp-dir raw_pcp/ \
+  --tmp-master master_tmp.txt --tmp-dir raw_tmp/ \
+  --target swat2012 --target swatplus \
+  weather_out/
 ```
 
-**Output SWAT 2012:**
+Với nhiều hơn một `--target`, mỗi định dạng được ghi vào thư mục con riêng:
+`weather_out/swat2012/`, `weather_out/swatplus/`.
+
+**Output SWAT2012** (`weather_out/swat2012/pcp_STATION01.txt`, không header metadata):
 ```
-pcp_STATION01
-Lati      15.00
-Long     105.00
-Elev     416.000
 19770101
-     0.000
-     5.500
+0.0
+5.5
+```
+
+**Output SWAT+** (`weather_out/swatplus/STATION01.pcp`, header 3 dòng):
+```
+STATION01.pcp: Precipitation data - file written by swatprep ...
+nbyr     tstep       lat       lon      elev
+  43         0    15.000   105.000   100.000
+1977    1    0.00000
+1977    2    5.50000
 ```
 
 **Python API:**
 
 ```python
-from swatprep.converters import PCPConverter
+from swatprep.converters.station_weather import StationWeatherConverter
+from swatprep.writers.weather import WeatherWriter
+from swatprep.writers.weather_plus import SWATPlusWeatherWriter
 
-result = PCPConverter(
-    master_path=Path("master_pcp.txt"),
-    data_dir=Path("raw/"),
-    out_dir=Path("swat_pcp/"),
+result = StationWeatherConverter(
+    pcp_master=Path("master_pcp.txt"), pcp_dir=Path("raw_pcp/"),
+    tmp_master=Path("master_tmp.txt"), tmp_dir=Path("raw_tmp/"),
 ).convert()
 
-print(f"Written: {len(result.files_written)}")
-print(f"Unmatched: {result.unmatched}")
+written_2012 = WeatherWriter(result, Path("weather_out/swat2012")).write()
+written_plus = SWATPlusWeatherWriter(result, Path("weather_out/swatplus")).write()
+
+print(f"SWAT2012: {len(written_2012)} files")
+print(f"SWAT+:    {len(written_plus)} files")
 ```
 
 **Kiểm tra file output:**
 
 ```bash
-head -8 swat_pcp/pcp_STATION01.pcp
-```
-
----
-
-### Bước 2b — SWAT+ weather files (SWATPlusWeatherConverter)
-
-**Input:** merged CSVs (từ Bước 1) + `master_pcp.txt`
-
-```python
-from swatprep.converters import SWATPlusWeatherConverter
-
-result = SWATPlusWeatherConverter(
-    data_dir=Path("merged/"),
-    out_dir=Path("swatplus/"),
-    metadata=Path("master_pcp.txt"),
-).convert()
-```
-
-**Output SWAT+:**
-```
-swatplus/
-├── station01.pcp        # precipitation
-├── station01.tmp        # tmax + tmin (2 cột, space separator)
-├── pcp.cli          # index file
-└── tmp.cli
-```
-
-**Kiểm tra format `.pcp`:**
-```bash
-head -5 swatplus/station01.pcp
-# pcp_STATION01 SWAT+ pcp file
-# nbyr     tstep       lat       lon      elev
-#   43         0    15.00   105.00   416.000
-# 1977    1    0.00000
-```
-
-**Kiểm tra format `.tmp` (2 cột):**
-```bash
-head -5 swatplus/station01.tmp
-# 1977    1   25.00000    18.00000
+head -3 weather_out/swat2012/pcp_STATION01.txt
+head -5 weather_out/swatplus/STATION01.pcp
+cat weather_out/swatplus/weather-sta.cli    # station registry
+cat weather_out/swatplus/weather-wgn.cli    # WGN statistics
 ```
 
 ---
@@ -251,31 +227,32 @@ for c in warnings(result.qa):
 
 ```python
 from pathlib import Path
-from swatprep.converters import (
-    DayFilesConverter, PCPConverter,
-    SWATPlusWeatherConverter, StreamflowConverter,
-)
+from swatprep.converters import DayFilesConverter, StreamflowConverter
+from swatprep.converters.station_weather import StationWeatherConverter
+from swatprep.writers.weather import WeatherWriter
+from swatprep.writers.weather_plus import SWATPlusWeatherWriter
 
-RAW_DIR    = Path("raw_data/")
-MASTER     = Path("master_pcp.txt")
-MERGED_DIR = Path("merged/")
-SWAT_DIR   = Path("swat2012_pcp/")
-PLUS_DIR   = Path("swatplus_weather/")
-FLOW_OUT   = Path("output/streamflow_long.csv")
+RAW_DIR     = Path("raw_data/")
+PCP_MASTER  = Path("master_pcp.txt")
+TMP_MASTER  = Path("master_tmp.txt")
+MERGED_DIR  = Path("merged/")
+SWAT_DIR    = Path("swat2012_weather/")
+PLUS_DIR    = Path("swatplus_weather/")
+FLOW_OUT    = Path("output/streamflow_long.csv")
 
 # Bước 1: merge .day files
 r1 = DayFilesConverter(data_dir=RAW_DIR, out_dir=MERGED_DIR).convert()
 print(f"[1] Merged {len(r1.stations_found)} stations -> {MERGED_DIR}")
 
-# Bước 2a: SWAT 2012 .pcp
-r2a = PCPConverter(master_path=MASTER, data_dir=RAW_DIR, out_dir=SWAT_DIR).convert()
-print(f"[2a] SWAT 2012: {len(r2a.files_written)} files, unmatched={r2a.unmatched}")
-
-# Bước 2b: SWAT+ weather
-r2b = SWATPlusWeatherConverter(
-    data_dir=MERGED_DIR, out_dir=PLUS_DIR, metadata=MASTER
+# Bước 2: raw pcp/tmp station files -> WeatherResult -> SWAT2012 + SWAT+
+r2 = StationWeatherConverter(
+    pcp_master=PCP_MASTER, pcp_dir=RAW_DIR,
+    tmp_master=TMP_MASTER, tmp_dir=RAW_DIR,
 ).convert()
-print(f"[2b] SWAT+: {len(r2b.files_written)} files")
+w2a = WeatherWriter(r2, SWAT_DIR).write()
+w2b = SWATPlusWeatherWriter(r2, PLUS_DIR).write()
+print(f"[2a] SWAT2012: {len(w2a)} files")
+print(f"[2b] SWAT+: {len(w2b)} files")
 
 # Bước 3: Streamflow
 r3 = StreamflowConverter(
@@ -291,23 +268,23 @@ print(f"[3] Streamflow: {r3.n_stations} stations, {r3.n_days} days")
 
 ```
 tests/
-├── conftest.py              # fixtures dùng chung
-├── test_qa.py               # 9 tests
-├── test_config.py           # 16 tests
-├── test_api.py              # 4 tests (1 skip nếu không có rasterio)
-├── test_converters.py       # 25 tests (DayFilesConverter + StreamflowConverter + CLI)
-├── test_pcp_converter.py    # 13 tests (2 live với R_STATION01.day)
-├── test_weather_plus.py     # 13 tests (1 live)
-├── test_weather.py          # 14 tests
-├── test_streamflow.py       # 11 tests
-├── test_dem.py              # 4 tests
-├── test_landuse.py          # 6 tests
-├── test_soil.py             # 8 tests
-├── test_manifest.py         # 6 tests
-└── test_raster_utils.py     # 2 tests (skip nếu không có rasterio)
+├── conftest.py                       # fixtures dùng chung
+├── test_qa.py                        # 9 tests
+├── test_config.py                    # 17 tests
+├── test_api.py                       # 4 tests (1 skip nếu không có rasterio)
+├── test_converters.py                # 30 tests (DayFilesConverter + StreamflowConverter + CLI)
+├── test_station_weather_converter.py # 9 tests (StationWeatherConverter: raw SWAT2012/CSV input)
+├── test_weather_plus_writer.py       # 12 tests (SWATPlusWeatherWriter: data files + weather-sta.cli/weather-wgn.cli)
+├── test_weather.py                   # 19 tests
+├── test_streamflow.py                # 11 tests
+├── test_dem.py                       # 5 tests
+├── test_landuse.py                   # 7 tests
+├── test_soil.py                      # 8 tests
+├── test_manifest.py                  # 6 tests
+└── test_raster_utils.py              # skip nếu không có rasterio
 ```
 
-**Tổng: 129 tests pass, 3 skip (yêu cầu rasterio)**
+**Tổng: `python -m pytest -v -k "not rasterio"` → xem output cho số liệu mới nhất.**
 
 ---
 
