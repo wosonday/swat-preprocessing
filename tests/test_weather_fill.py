@@ -257,6 +257,43 @@ class TestWeatherGapFillerOverlapEdgeCases:
 
         assert any("S2" in c.message and "no fill source" in c.message for c in warnings(result.qa))
 
+    def test_upstream_preprocessor_qa_is_propagated_and_downgraded_to_warn(self, tmp_path):
+        from swatprep.config import WeatherConfig
+        from swatprep.core.weather_fill import WeatherGapFiller
+        from swatprep.qa import failures, warnings
+
+        real_sta = _write_stations_csv(tmp_path, "real_stations.csv", [
+            {"id": "S1", **_META},
+            {"id": "S2", "name": "StationS2", "lat": 15.1, "lon": 105.1, "elev": 110},
+        ])
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        dates = ["2000-01-01", "2000-01-02"]
+        _write_station_csv(real_dir, "S1", dates, precip=[1.0, 2.0])
+        # No S2.csv written -- S1 has a data file, S2's data file is entirely missing.
+
+        fill_sta = _write_stations_csv(tmp_path, "fill_stations.csv", [{"id": "S1", **_META}])
+        fill_dir = tmp_path / "fill"
+        fill_dir.mkdir()
+        _write_station_csv(fill_dir, "S1", dates, precip=[1.5, 2.5])
+
+        real_cfg = WeatherConfig(
+            stations=real_sta, data_dir=real_dir, variables=["precip"],
+            start="2000-01-01", end="2000-01-02", missing_policy="warn",
+        )
+        fill_cfg = WeatherConfig(
+            stations=fill_sta, data_dir=fill_dir, variables=["precip"],
+            start="2000-01-01", end="2000-01-02", missing_policy="warn",
+        )
+
+        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=1).run()
+
+        # The upstream WeatherPreprocessor "fail" for S2's missing data file
+        # must not surface as a fail here -- it should be downgraded to warn
+        # and merged into this result's QA list, not silently dropped.
+        assert failures(result.qa) == []
+        assert any("S2" in c.message for c in warnings(result.qa))
+
 
 class TestWeatherFillWriter:
     def _build_result(self, tmp_path):

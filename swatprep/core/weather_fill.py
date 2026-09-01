@@ -11,7 +11,7 @@ docs/superpowers/specs/2026-09-01-weather-gap-fill-design.md for the design.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import pandas as pd
 
@@ -115,6 +115,17 @@ class WeatherGapFiller:
         qa: list[QACheck] = []
         real_result = WeatherPreprocessor(self.real_cfg).run()
         fill_result = WeatherPreprocessor(self.fill_cfg).run()
+
+        # Propagate QA from both upstream WeatherPreprocessor runs (e.g. a
+        # station's data file entirely missing, or missing a requested
+        # variable column) instead of silently discarding it. Any "fail" is
+        # downgraded to "warn" here -- one bad station in either source must
+        # not block the rest of the gap-fill run.
+        for check in [*real_result.qa, *fill_result.qa]:
+            if check.status == "fail":
+                qa.append(replace(check, status="warn"))
+            else:
+                qa.append(check)
 
         filled_daily: dict[str, pd.DataFrame] = {}
         report_rows: list[dict] = []
