@@ -338,3 +338,70 @@ class TestWeatherFillWriter:
         assert failures(reloaded.qa) == []
         precip = reloaded.daily["precip"]["S1"]
         assert precip.isna().sum() == 0  # the filled day introduced no new gap
+
+
+class TestCLIFillWeather:
+    def _build_inputs(self, tmp_path):
+        real_sta = _write_stations_csv(tmp_path, "real_stations.csv", [{"id": "S1", **_META}])
+        real_dir = tmp_path / "real"
+        real_dir.mkdir()
+        dates = ["2000-01-01", "2000-01-02", "2000-01-03"]
+        _write_station_csv(real_dir, "S1", dates, precip=[2.0, None, 4.0])
+
+        fill_sta = _write_stations_csv(tmp_path, "fill_stations.csv", [{"id": "S1", **_META}])
+        fill_dir = tmp_path / "fill"
+        fill_dir.mkdir()
+        _write_station_csv(fill_dir, "S1", dates, precip=[1.0, 5.0, 2.0])
+
+        return real_sta, real_dir, fill_sta, fill_dir
+
+    def test_cli_fill_weather_help(self):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        runner = CliRunner()
+        res = runner.invoke(main, ["fill", "weather", "--help"])
+        assert res.exit_code == 0
+        assert "--fill-stations" in res.output
+
+    def test_cli_fill_weather_runs_end_to_end(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        real_sta, real_dir, fill_sta, fill_dir = self._build_inputs(tmp_path)
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(main, [
+            "fill", "weather",
+            "--stations", str(real_sta), "--data-dir", str(real_dir),
+            "--fill-stations", str(fill_sta), "--fill-data-dir", str(fill_dir),
+            "--variables", "precip",
+            "--start", "2000-01-01", "--end", "2000-01-03",
+            "--min-overlap-days", "1",
+            str(out),
+        ])
+
+        assert res.exit_code == 0, res.output
+        assert (out / "stations.csv").exists()
+        assert (out / "S1.csv").exists()
+        assert (out / "fill_report.csv").exists()
+
+        df = pd.read_csv(out / "S1.csv")
+        assert df["precip"].iloc[1] == pytest.approx(10.0)
+
+    def test_cli_fill_weather_missing_required_option_fails(self, tmp_path):
+        from click.testing import CliRunner
+        from swatprep.cli import main
+
+        real_sta, real_dir, _fill_sta, _fill_dir = self._build_inputs(tmp_path)
+        out = tmp_path / "out"
+        runner = CliRunner()
+        res = runner.invoke(main, [
+            "fill", "weather",
+            "--stations", str(real_sta), "--data-dir", str(real_dir),
+            "--variables", "precip",
+            "--start", "2000-01-01", "--end", "2000-01-03",
+            str(out),
+        ])
+
+        assert res.exit_code != 0
