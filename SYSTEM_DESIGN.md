@@ -109,13 +109,13 @@ Raw Vietnamese .day files
     v
 converters/                          ← optional pre-processing layer
     DayFilesConverter                    merge .day → per-station CSV
-    PCPConverter  ─┐
-                   ├─ swat2012.py    write SWAT 2012 .pcp / .tmp
-    TmpConverter  ─┘
-    SWATPlusWeatherConverter         write SWAT+ precipitation/temperature files
+    StationWeatherConverter              read raw pcp/tmp master+data (SWAT
+                                          Classic style or CSV) → WeatherResult,
+                                          written by WeatherWriter (SWAT2012) /
+                                          SWATPlusWeatherWriter (SWAT+)
     StreamflowConverter              reshape streamflow CSVs
     |
-    v (per-station CSV / validated inputs)
+    v (per-station CSV / WeatherResult / validated inputs)
 
 config.yaml
     |
@@ -362,15 +362,15 @@ swat-preprocessing/
     converters/                      ← pre-processing layer (independent of build())
       __init__.py
       climate.py                     ← DayFilesConverter (merge .day files → CSV)
-      swat2012.py                    ← PCPConverter + TmpConverter (.pcp/.tmp files)
-      weather_plus.py                ← SWATPlusWeatherConverter (SWAT+ format)
+      station_weather.py             ← StationWeatherConverter (raw pcp/tmp master+data → WeatherResult)
       streamflow.py                  ← StreamflowConverter
     writers/
       __init__.py
       manifest.py
       spatial.py
       soil.py
-      weather.py
+      weather.py                     ← WeatherWriter (SWAT2012)
+      weather_plus.py                ← SWATPlusWeatherWriter (SWAT+)
       observations.py
     utils/
       __init__.py

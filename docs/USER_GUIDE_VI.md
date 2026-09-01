@@ -367,52 +367,52 @@ swatprep convert streamflow D:/data/streamflow_dir D:/output/streamflow_long.csv
     --format per_station --glob "Q_*.csv"
 ```
 
-### 8.3 Convert pcp (tao file .pcp cho SWAT 2012)
+### 8.3 Convert weather (chuyen file tram tho sang SWAT2012 va/hoac SWAT+)
 
-**Truong hop su dung:** Tao file .pcp dinh dang SWAT Classic tu file master metadata + file .day tho.
+**Truong hop su dung:** Chuyen file tram tho (dang SWAT Classic: dong 1 =
+YYYYMMDD + moi dong mot gia tri, hoac CSV voi cot `date` + bien) cung file
+master metadata thanh dinh dang SWAT2012 va/hoac SWAT+. Day la lenh duy nhat
+thay the cac lenh `convert pcp` / `convert tmp` / `convert swatplus` da bi
+go bo.
 
 ```bash
-swatprep convert pcp D:/data/master.csv D:/data/raw_pcp D:/output/pcp_files
+swatprep convert weather \
+  --pcp-master D:/data/master_pcp.txt --pcp-dir D:/data/raw_pcp \
+  --tmp-master D:/data/master_tmp.txt --tmp-dir D:/data/raw_tmp \
+  --target swat2012 --target swatplus \
+  D:/output/weather
 ```
 
-**Master CSV** can co cac cot: `ID, NAME, LAT, LONG, ELEVATION`
+**Master file** (`--pcp-master`/`--tmp-master`) can co cac cot:
+`ID, NAME, LAT, LONG, ELEVATION`. Can it nhat mot nhom (`--pcp-master` +
+`--pcp-dir`, hoac `--tmp-master` + `--tmp-dir`) phai duoc cung cap; ca hai
+nhom la doc lap (co the chi chuyen doi mua, chi nhiet do, hoac ca hai).
 
-**Quy tac noi ten:** NAME=`pcp_STATION01` -> strip `pcp_` -> `STATION01` -> tim `R_STATION01.day`
+Dinh dang dau vao duoc tu dong phat hien theo tung tram:
+- SWAT Classic: dong 1 = YYYYMMDD, cac dong tiep theo la mot gia tri
+  (pcp) hoac `tmin,tmax` (tmp).
+- CSV: cac cot `date` + `precip` hoac `date` + `tmax,tmin`.
 
 **Tuy chon:**
 
 | Option | Mac dinh | Mo ta |
 |--------|----------|-------|
-| `--name-prefix` | `pcp_` | Prefix cat bo tu cot NAME |
-| `--raw-prefix` | `R_` | Prefix file .day |
-| `--raw-suffix` | `.day` | Duoi file .day |
-| `--value-col` | `Rain` | Ten cot gia tri mua |
-| `--out-suffix` | `.pcp` | Duoi file output |
+| `--pcp-master` | — | Master CSV cho tram mua |
+| `--pcp-dir` | — | Thu muc file tram mua tho |
+| `--tmp-master` | — | Master CSV cho tram nhiet do |
+| `--tmp-dir` | — | Thu muc file tram nhiet do tho |
+| `--target` | `swat2012` | Dinh dang xuat: `swat2012` (hoac bi danh `swat`), `swatplus`. Co the lap lai. |
 
-### 8.4 Convert tmp (tao file .tmp cho SWAT 2012)
+Khi truyen nhieu hon mot `--target`, moi dinh dang duoc ghi vao thu muc con
+rieng: `OUT_DIR/swat2012/`, `OUT_DIR/swatplus/`.
 
-**Truong hop su dung:** Tao file .tmp nhiet do dinh dang SWAT Classic.
-
-```bash
-swatprep convert tmp D:/data/master.csv D:/data/raw_tmp D:/output/tmp_files
-```
-
-**Tu dong phat hien dinh dang dau vao:**
-- SWAT Classic: dong 1 = YYYYMMDD, cac dong tiep = `tmin,tmax`
-- CSV: cac cot `date, tmax, tmin`
-
-### 8.5 Convert swatplus (SWAT Classic -> SWAT+)
-
-**Truong hop su dung:** Chuyen file .pcp va .tmp cua SWAT Classic sang dinh dang SWAT+.
-
-```bash
-swatprep convert swatplus D:/data/master.csv D:/data/pcp_dir D:/data/tmp_dir D:/output/swatplus
-```
-
-Lenh nay:
-1. Doc master metadata
-2. Ghep file pcp + tmp theo tung tram
-3. Ghi file SWAT+ (.pcp, .tmp) va file index (pcp.cli, tmp.cli)
+**Ket qua:**
+- `--target swat2012`: `pcp_<name>.txt`/`tmp_<name>.txt` (khong header
+  metadata, dong 1 la ngay ban ghi dau tien) + `master_pcp.txt`/
+  `master_tmp.txt`.
+- `--target swatplus`: `<name>.pcp`/`<name>.tmp` (header 3 dong) + file chi
+  muc `pcp.cli`/`tmp.cli` + hai file lien ket `weather-sta.cli` (dang ky
+  tram) va `weather-wgn.cli` (thong ke WGN).
 
 ---
 

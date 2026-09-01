@@ -9,6 +9,7 @@ Commands:
     swatprep inspect weather PATH
     swatprep convert climate DATA_DIR OUT_DIR
     swatprep convert streamflow SOURCE OUT_PATH
+    swatprep convert weather [--pcp-master ... --pcp-dir ...] [--tmp-master ... --tmp-dir ...] OUT_DIR
 """
 
 from __future__ import annotations
@@ -280,322 +281,84 @@ def convert_streamflow(
         click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
         sys.exit(1)
 
-@convert.command("pcp")
-@click.argument("master_path", type=click.Path(exists=True, path_type=Path))
-@click.argument("data_dir", type=click.Path(exists=True, path_type=Path))
+
+@convert.command("weather")
+@click.option("--pcp-master", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Master CSV for precipitation stations (ID,NAME,LAT,LONG,ELEVATION).")
+@click.option("--pcp-dir", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Directory containing raw precipitation station files.")
+@click.option("--tmp-master", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Master CSV for temperature stations (ID,NAME,LAT,LONG,ELEVATION).")
+@click.option("--tmp-dir", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Directory containing raw temperature station files.")
+@click.option("--target", "targets", multiple=True,
+              type=click.Choice(["swat2012", "swat", "swatplus"]), default=("swat2012",),
+              show_default=True,
+              help="Output format to write: 'swat2012' (alias 'swat') or 'swatplus'. "
+                   "Repeatable, e.g. --target swat2012 --target swatplus.")
 @click.argument("out_dir", type=click.Path(path_type=Path))
-@click.option("--name-prefix", default="pcp_", show_default=True,
-              help="Prefix to strip from NAME column to get station code.")
-@click.option("--raw-prefix", default="R_", show_default=True,
-              help="Prefix for raw .day files (e.g. R_ for R_STATION01.day).")
-@click.option("--raw-suffix", default=".day", show_default=True,
-              help="File suffix for raw data files.")
-@click.option("--value-col", default="Rain", show_default=True,
-              help="Column name for precipitation values in .day files.")
-@click.option("--out-suffix", default=".pcp", show_default=True,
-              help="Output file suffix (.pcp or .txt for legacy SWAT).")
-def convert_pcp(
-    master_path: Path,
-    data_dir: Path,
+def convert_weather(
+    pcp_master: Path | None,
+    pcp_dir: Path | None,
+    tmp_master: Path | None,
+    tmp_dir: Path | None,
+    targets: tuple[str, ...],
     out_dir: Path,
-    name_prefix: str,
-    raw_prefix: str,
-    raw_suffix: str,
-    value_col: str,
-    out_suffix: str,
 ) -> None:
-    """Build SWAT 2012 .pcp files from master metadata + raw .day files.
+    """Convert raw station weather files to SWAT2012 and/or SWAT+ format.
 
-    Reads MASTER_PATH (CSV with ID, NAME, LAT, LONG, ELEVATION), matches each
-    station to its raw file in DATA_DIR, and writes SWAT-format .pcp files to
-    OUT_DIR with the 4-line header (title / Lati / Long / Elev).
+    Reads a precipitation group (--pcp-master + --pcp-dir) and/or a
+    temperature group (--tmp-master + --tmp-dir) of raw per-station files,
+    auto-detecting SWAT Classic style (YYYYMMDD header + one value per line)
+    or CSV. At least one group must be given.
 
-    Matching: NAME="pcp_STATION01" -> strip "pcp_" -> "STATION01" -> "R_STATION01.day"
+    Writes to OUT_DIR for each --target given. When more than one target is
+    given, each is written to its own OUT_DIR/<target>/ subdirectory so the
+    two formats' filenames don't collide.
 
-    MASTER_PATH  Master CSV file (ID,NAME,LAT,LONG,ELEVATION).
-    DATA_DIR     Directory containing raw R_STATION.day files.
-    OUT_DIR      Directory where .pcp output files will be written.
+    OUT_DIR   Directory where the converted weather files will be written.
     """
-    from .converters import PCPConverter
+    from .converters.station_weather import StationWeatherConverter
     from .qa import failures, warnings
 
-    converter = PCPConverter(
-        master_path=master_path,
-        data_dir=data_dir,
-        out_dir=out_dir,
-        name_prefix=name_prefix,
-        raw_prefix=raw_prefix,
-        raw_suffix=raw_suffix,
-        value_col=value_col,
-        out_suffix=out_suffix,
+    # "swat" is an alias for "swat2012" -- same writer, same output.
+    targets = tuple("swat2012" if t == "swat" else t for t in targets)
+
+    converter = StationWeatherConverter(
+        pcp_master=pcp_master, pcp_dir=pcp_dir,
+        tmp_master=tmp_master, tmp_dir=tmp_dir,
     )
     result = converter.convert()
 
-    warn_list = warnings(result.qa)
-    fail_list = failures(result.qa)
-
-    for sr in result.stations:
-   
-        if sr.out_path:
-            click.echo(f"  v {sr.name}: {sr.n_days} days -> {sr.out_path.name}")
-        else:
-            for c in sr.qa:
-                if c.status != "pass":
-                    click.echo(f"  ! {sr.name}: {c.message}")
-
-    click.echo(f"\nWritten    : {len(result.files_written)}")
-    click.echo(f"Unmatched  : {len(result.unmatched)}")
-    click.echo(f"Output dir : {out_dir}")
-
-    if result.unmatched:
-        click.echo(f"Unmatched stations: {result.unmatched}")
+    for c in result.qa:
+        symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
+        click.echo(f"  {symbol} {c.name}: {c.message}")
 
     fail_list = failures(result.qa)
     if fail_list:
         click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
         sys.exit(1)
 
+    multi = len(targets) > 1
+    written: list[Path] = []
+    for target in targets:
+        dest = out_dir / target if multi else out_dir
+        if target == "swat2012":
+            from .writers.weather import WeatherWriter
+            written += WeatherWriter(result, dest).write()
+        elif target == "swatplus":
+            from .writers.weather_plus import SWATPlusWeatherWriter
+            written += SWATPlusWeatherWriter(result, dest).write()
 
-@convert.command("tmp")
-@click.argument("master_path", type=click.Path(exists=True, path_type=Path))
-@click.argument("data_dir", type=click.Path(exists=True, path_type=Path))
-@click.argument("out_dir", type=click.Path(path_type=Path))
-@click.option("--name-prefix", default="tmp_", show_default=True,
-              help="Prefix to strip from NAME column to get station code.")
-@click.option("--raw-prefix", default="tmp_", show_default=True,
-              help="Prefix for raw temperature files (e.g. tmp_ for tmp_STATION01.txt).")
-@click.option("--raw-suffix", default=".txt", show_default=True,
-              help="File suffix for raw temperature files.")
-@click.option("--tmin-first/--tmax-first", default=True, show_default=True,
-              help="Column order in SWAT Classic input: tmin,tmax (default) or tmax,tmin.")
-@click.option("--separator", default=",", show_default=True,
-              help="Separator between tmin and tmax values in input file.")
-@click.option("--out-suffix", default=".tmp", show_default=True,
-              help="Output file suffix.")
-def convert_tmp(
-    master_path: Path,
-    data_dir: Path,
-    out_dir: Path,
-    name_prefix: str,
-    raw_prefix: str,
-    raw_suffix: str,
-    tmin_first: bool,
-    separator: str,
-    out_suffix: str,
-) -> None:
-    """Build SWAT 2012 .tmp files from master metadata + raw temperature files.
-
-    Reads MASTER_PATH (CSV with ID, NAME, LAT, LONG, ELEVATION), matches each
-    station to its raw file in DATA_DIR, and writes SWAT 2012 .tmp files with
-    the 4-line header (title / Lati / Long / Elev) + daily tmax tmin pairs.
-
-    Auto-detects input format:
-      - SWAT Classic: line 1 = YYYYMMDD, rest = "tmin,tmax" per line.
-      - CSV: columns date, tmax, tmin.
-
-    Matching: NAME="tmp_STATION01" -> strip "tmp_" -> "STATION01" -> "tmp_STATION01.txt"
-
-    MASTER_PATH  Master CSV file (ID,NAME,LAT,LONG,ELEVATION).
-    DATA_DIR     Directory containing raw tmp_STATION.txt files.
-    OUT_DIR      Directory where .tmp output files will be written.
-    """
-    from .converters import TmpConverter
-    from .qa import failures, warnings
-
-    converter = TmpConverter(
-        master_path=master_path,
-        data_dir=data_dir,
-        out_dir=out_dir,
-        name_prefix=name_prefix,
-        raw_prefix=raw_prefix,
-        raw_suffix=raw_suffix,
-        tmin_first=tmin_first,
-        separator=separator,
-        out_suffix=out_suffix,
-    )
-    result = converter.convert()
+    click.echo(f"\nFiles written : {len(written)}")
+    click.echo(f"Output dir    : {out_dir}")
+    click.echo(f"Targets       : {', '.join(targets)}")
 
     warn_list = warnings(result.qa)
-    fail_list = failures(result.qa)
-
-    for sr in result.stations:
-        if sr.out_path:
-            click.echo(f"  v {sr.name}: {sr.n_days} days -> {sr.out_path.name}")
-        else:
-            for c in sr.qa:
-                if c.status != "pass":
-                    click.echo(f"  ! {sr.name}: {c.message}")
-
-    click.echo(f"\nWritten    : {len(result.files_written)}")
-    click.echo(f"Unmatched  : {len(result.unmatched)}")
-    click.echo(f"Output dir : {out_dir}")
-
-    if result.unmatched:
-        click.echo(f"Unmatched stations: {result.unmatched}")
-
     if warn_list:
         click.echo(f"Warnings: {len(warn_list)}")
-    if fail_list:
-        click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
-        sys.exit(1)
-
-
-@convert.command("swatplus")
-@click.argument("master_path", type=click.Path(exists=True, path_type=Path))
-@click.argument("pcp_dir",    type=click.Path(exists=True, path_type=Path))
-@click.argument("tmp_dir",    type=click.Path(exists=True, path_type=Path))
-@click.argument("out_dir",    type=click.Path(path_type=Path))
-@click.option("--name-prefix",  default="pcp_", show_default=True,
-              help="Prefix to strip from master NAME (pcp_ -> STATION01).")
-@click.option("--pcp-prefix",   default="pcp_", show_default=True,
-              help="Prefix for pcp files (pcp_STATION01.txt).")
-@click.option("--pcp-suffix",   default=".txt",  show_default=True)
-@click.option("--tmp-prefix",   default="tmp_", show_default=True,
-              help="Prefix for tmp files (tmp_STATION01.txt).")
-@click.option("--tmp-suffix",   default=".txt",  show_default=True)
-@click.option("--tmin-first/--tmax-first", default=True, show_default=True,
-              help="Column order in tmp file: tmin,tmax (default) or tmax,tmin.")
-@click.option("--separator",    default=",",    show_default=True,
-              help="Separator between tmin and tmax in tmp file.")
-def convert_swatplus(
-    master_path: Path,
-    pcp_dir: Path,
-    tmp_dir: Path,
-    out_dir: Path,
-    name_prefix: str,
-    pcp_prefix: str,
-    pcp_suffix: str,
-    tmp_prefix: str,
-    tmp_suffix: str,
-    tmin_first: bool,
-    separator: str,
-) -> None:
-    """Build SWAT+ weather files from SWAT Classic pcp + tmp files.
-
-    Reads MASTER_PATH for station metadata. For each station, reads the
-    SWAT Classic pcp file from PCP_DIR and the tmp file from TMP_DIR,
-    merges them, then writes SWAT+ .pcp + .tmp files and pcp.cli/tmp.cli.
-
-    Matching: NAME="pcp_STATION01" -> station "STATION01"
-              -> PCP_DIR/pcp_STATION01.txt + TMP_DIR/tmp_STATION01.txt
-
-    MASTER_PATH  Master CSV (ID,NAME,LAT,LONG,ELEVATION).
-    PCP_DIR      Directory with pcp_STATION.txt files.
-    TMP_DIR      Directory with tmp_STATION.txt files.
-    OUT_DIR      Directory for SWAT+ output files.
-    """
-    import pandas as pd
-    from .converters.pcp import PCPConverter
-    from .converters.tmp import TmpConverter
-    from .converters.weather_plus import SWATPlusWeatherConverter
-    from .qa import failures, warnings
-
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Use a temp merged CSV dir
-    import tempfile
-    merged_dir = Path(tempfile.mkdtemp(prefix="swatprep_merged_"))
-
-    # Read master
-    master_df = pd.read_csv(master_path)
-    name_col = "NAME"
-
-    pcp_conv = PCPConverter(
-        master_path=master_path,
-        data_dir=pcp_dir,
-        out_dir=out_dir,
-        name_prefix=name_prefix,
-        raw_prefix=pcp_prefix,
-        raw_suffix=pcp_suffix,
-    )
-    tmp_conv = TmpConverter(
-        master_path=master_path,
-        data_dir=tmp_dir,
-        out_dir=out_dir,
-        name_prefix=name_prefix,
-        raw_prefix=tmp_prefix,
-        raw_suffix=tmp_suffix,
-        tmin_first=tmin_first,
-        separator=separator,
-    )
-
-    n_ok = 0
-    n_miss = 0
-
-    for _, row in master_df.iterrows():
-        name = str(row[name_col]).strip()
-        station = name[len(name_prefix):] if name.startswith(name_prefix) else name
-
-        pcp_file = pcp_conv._find_raw_file(station)
-        tmp_file = tmp_conv._find_raw_file(station)
-
-        if pcp_file is None and tmp_file is None:
-            click.echo(f"  ! {station}: both pcp and tmp files not found")
-            n_miss += 1
-            continue
-
-        # Read pcp
-        if pcp_file is None:
-            df_pcp = None
-        elif not pcp_conv._is_swat_format(pcp_file):
-            click.echo(f"  ! {station}: {pcp_file.name} is not SWAT Classic format — skipping", err=True)
-            n_miss += 1
-            continue
-        else:
-            df_pcp = pcp_conv._read_swat_pcp(pcp_file)
-            df_pcp = df_pcp.rename(columns={pcp_conv.value_col: "precip"})
-
-        # Read tmp
-        if tmp_file is None:
-            df_tmp = None
-        elif not tmp_conv._is_swat_format(tmp_file):
-            click.echo(f"  ! {station}: {tmp_file.name} is not SWAT Classic format — skipping", err=True)
-            n_miss += 1
-            continue
-        else:
-            df_tmp = tmp_conv._read_swat_tmp(tmp_file)
-
-        # Merge
-        if df_pcp is not None and df_tmp is not None:
-            df = pd.merge(df_pcp, df_tmp, on="date", how="outer")
-        elif df_pcp is not None:
-            df = df_pcp
-        else:
-            df = df_tmp
-
-        df.to_csv(merged_dir / f"{station}.csv", index=False)
-        click.echo(f"  v {station}: {len(df)} days merged")
-        n_ok += 1
-
-    if n_ok == 0:
-        click.echo("No stations merged. Aborting.", err=True)
-        sys.exit(1)
-
-    # Run SWATPlusWeatherConverter on merged CSVs
-    result = SWATPlusWeatherConverter(
-        data_dir=merged_dir,
-        out_dir=out_dir,
-        metadata=master_path,
-        meta_name_prefix=name_prefix,
-    ).convert()
-
-    warn_list = warnings(result.qa)
-    fail_list = failures(result.qa)
-
-    click.echo(f"\nSWAT+ files written : {len(result.data_files)}")
-    click.echo(f"CLI index files     : {len(result.cli_files)}")
-    click.echo(f"Output dir          : {out_dir}")
-
-    for f in result.cli_files:
-        click.echo(f"  {f.name}")
-
-    if warn_list:
-        click.echo(f"Warnings: {len(warn_list)}")
-    if fail_list:
-        click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
-        sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
+

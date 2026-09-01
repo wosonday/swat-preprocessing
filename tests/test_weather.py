@@ -145,6 +145,43 @@ def test_wgn_unavailable_params_are_minus99(weather_stations_csv, weather_data_d
         assert (wgn[col] == -99.0).all()
 
 
+def test_wgn_station_order_is_sorted_and_deterministic(tmp_dir):
+    """compute_wgn_stats must not depend on set() iteration order -- station
+    order should be alphabetically sorted and identical across repeated runs."""
+    import textwrap
+    from swatprep.core.weather import compute_wgn_stats
+
+    sta = tmp_dir / "stations.csv"
+    sta.write_text(textwrap.dedent("""\
+        id,name,lat,lon,elev
+        ST_Z,StationZ,15.0,105.0,100
+        ST_A,StationA,15.1,105.1,101
+        ST_M,StationM,15.2,105.2,102
+        ST_B,StationB,15.3,105.3,103
+    """), encoding="utf-8")
+    data_dir = tmp_dir / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=5, freq="D")
+    for sid in ("ST_Z", "ST_A", "ST_M", "ST_B"):
+        df = pd.DataFrame({
+            "date": dates.strftime("%Y-%m-%d"),
+            "precip": [1.0] * 5,
+            "tmax": [30.0] * 5,
+            "tmin": [20.0] * 5,
+        })
+        df.to_csv(data_dir / f"{sid}.csv", index=False)
+
+    cfg = _make_cfg(sta, data_dir, end=date(2000, 1, 5))
+    result = WeatherPreprocessor(cfg).run()
+
+    expected_order = sorted(["ST_Z", "ST_A", "ST_M", "ST_B"])
+    order_run1 = list(compute_wgn_stats(result.stations, result.daily, [])["station_id"].unique())
+    order_run2 = list(compute_wgn_stats(result.stations, result.daily, [])["station_id"].unique())
+
+    assert order_run1 == expected_order
+    assert order_run1 == order_run2
+
+
 # ---------------------------------------------------------------------------
 # WeatherWriter integration
 # ---------------------------------------------------------------------------
@@ -157,35 +194,82 @@ def test_weather_writer_creates_pcp_and_tmp(weather_stations_csv, weather_data_d
     out = tmp_dir / "weather_out"
     written = WeatherWriter(result, out).write()
     paths = [p.name for p in written]
-    assert "StationA.pcp" in paths
-    assert "StationB.pcp" in paths
-    assert "StationA.tmp" in paths
-    assert "StationB.tmp" in paths
+    assert "pcp_StationA.txt" in paths
+    assert "pcp_StationB.txt" in paths
+    assert "tmp_StationA.txt" in paths
+    assert "tmp_StationB.txt" in paths
+    assert "master_pcp.txt" in paths
+    assert "master_tmp.txt" in paths
     assert "wgn.csv" in paths
 
 
 def test_pcp_file_format(weather_stations_csv, weather_data_dir, tmp_dir):
+    """No metadata header block; line 1 is the date of the FIRST record (no offset)."""
     from swatprep.writers.weather import WeatherWriter
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
     out = tmp_dir / "weather_out"
     WeatherWriter(result, out).write()
-    pcp = (out / "StationA.pcp").read_text(encoding="utf-8").splitlines()
-    assert pcp[0].startswith("Precipitation data")
-    assert pcp[1].startswith("Lati")
-    assert pcp[4] == "19991231"
-    assert len(pcp[5].strip()) > 0
+    pcp = (out / "pcp_StationA.txt").read_text(encoding="utf-8").splitlines()
+    assert pcp[0] == "20000101"
+    assert len(pcp) == 11  # date line + 10 daily values
+    assert pcp[1] == "1.0"  # weather_data_dir fixture: StationA precip[0] == 1.0
 
 
-def test_tmp_file_has_two_values_per_line(weather_stations_csv, weather_data_dir, tmp_dir):
+def test_tmp_file_has_tmin_tmax_per_line(weather_stations_csv, weather_data_dir, tmp_dir):
     from swatprep.writers.weather import WeatherWriter
     cfg = _make_cfg(weather_stations_csv, weather_data_dir)
     result = WeatherPreprocessor(cfg).run()
     out = tmp_dir / "weather_out"
     WeatherWriter(result, out).write()
-    tmp_lines = (out / "StationA.tmp").read_text(encoding="utf-8").splitlines()
-    data_line = tmp_lines[5]
-    assert len(data_line) == 20
+    tmp_lines = (out / "tmp_StationA.txt").read_text(encoding="utf-8").splitlines()
+    tmin_str, tmax_str = tmp_lines[1].split(",")
+    assert float(tmin_str) == 22.0  # weather_data_dir fixture: StationA tmin[0]
+    assert float(tmax_str) == 30.1  # weather_data_dir fixture: StationA tmax[0]
+
+
+def test_master_pcp_has_uppercase_columns_and_prefix(weather_stations_csv, weather_data_dir, tmp_dir):
+    from swatprep.writers.weather import WeatherWriter
+    cfg = _make_cfg(weather_stations_csv, weather_data_dir)
+    result = WeatherPreprocessor(cfg).run()
+    out = tmp_dir / "weather_out"
+    WeatherWriter(result, out).write()
+    master = pd.read_csv(out / "master_pcp.txt")
+    assert list(master.columns) == ["ID", "NAME", "LAT", "LONG", "ELEVATION"]
+    assert {"pcp_StationA", "pcp_StationB"}.issubset(set(master["NAME"]))
+
+
+def test_master_pcp_excludes_stations_with_no_written_data_file(weather_stations_csv, tmp_dir):
+    """A station whose raw data file is missing (only a fail QA, not a hard
+    error since another station succeeds) must not appear in master_pcp.txt --
+    that file is a real SWAT2012 model input, not just a reference list."""
+    from swatprep.writers.weather import WeatherWriter
+
+    data_dir = tmp_dir / "data"
+    data_dir.mkdir()
+    dates = pd.date_range("2000-01-01", periods=10, freq="D")
+    df = pd.DataFrame({
+        "date": dates.strftime("%Y-%m-%d"),
+        "precip": [1.0] * 10,
+        "tmax": [30.0] * 10,
+        "tmin": [20.0] * 10,
+    })
+    # Only ST001's data file is written; ST002's is missing entirely.
+    df.to_csv(data_dir / "ST001.csv", index=False)
+
+    cfg = _make_cfg(weather_stations_csv, data_dir)
+    result = WeatherPreprocessor(cfg).run()
+
+    from swatprep.qa import failures as _failures
+    fail_checks = _failures(result.qa)
+    assert any("data_file" in c.name for c in fail_checks)
+
+    out = tmp_dir / "weather_out"
+    WeatherWriter(result, out).write()
+    master = pd.read_csv(out / "master_pcp.txt")
+    assert "pcp_StationA" in set(master["NAME"])
+    assert "pcp_StationB" not in set(master["NAME"])
+    assert "ST002" not in set(master["ID"])
 
 
 # ---------------------------------------------------------------------------
@@ -241,11 +325,11 @@ def test_split_source_loads_different_stations(tmp_dir):
     out = tmp_dir / "weather_out"
     written = WeatherWriter(result, out).write()
     paths = [p.name for p in written]
-    assert "PrecipA.pcp" in paths
-    assert "TempA.tmp" in paths
-    assert "PrecipA.tmp" not in paths
-    assert "precip_stations.csv" in paths
-    assert "temp_stations.csv" in paths
+    assert "pcp_PrecipA.txt" in paths
+    assert "tmp_TempA.txt" in paths
+    assert "tmp_PrecipA.txt" not in paths
+    assert "master_pcp.txt" in paths
+    assert "master_tmp.txt" in paths
 
     from swatprep.qa import failures as _failures
     assert not _failures(result.qa)

@@ -26,10 +26,12 @@ Implemented:
 - Converters layer under `swatprep/converters/`:
   - `climate.py` — `DayFilesConverter`: merges per-variable `.day` files into
     per-station CSVs
-  - `swat2012.py` — `PCPConverter` and `TmpConverter`: write SWAT 2012 `.pcp`
-    and `.tmp` files with 4-line header + YYYYMMDD + fixed-width values
-  - `weather_plus.py` — `SWATPlusWeatherConverter`: writes SWAT+ `.pcp`, `.tmp`,
-    `.hmd`, `.slr`, `.wnd`, and `.cli` index files
+  - `station_weather.py` — `StationWeatherConverter`: reads raw per-station
+    pcp/tmp master files + data directories (SWAT Classic style or CSV) into a
+    `WeatherResult`, which `writers/weather.py`'s `WeatherWriter` or
+    `writers/weather_plus.py`'s `SWATPlusWeatherWriter` then write out —
+    conversion (reading) and formatting (writing) are separate concerns, one
+    writer per target format
   - `streamflow.py` — `StreamflowConverter`
 - Writers under `swatprep/writers/`
 - Manifest and QA report writing
@@ -49,33 +51,55 @@ at least one domain is processed.
 ## Architecture: Converters Layer
 
 `swatprep/converters/` is an independent conversion layer that sits between raw
-field data and the `WeatherPreprocessor`. It does not depend on `swatprep/core/`.
+field data and `swatprep/core/`'s `WeatherPreprocessor`-shaped `WeatherResult`.
+It does not depend on `swatprep/core/`.
 
 Key classes:
 
 | Class | Input | Output |
 |-------|-------|--------|
 | `DayFilesConverter` | `R_*.day`, `Tx_*.day`, `Tm_*.day` | `{STATION}.csv` |
-| `PCPConverter` | master CSV + raw `.day`/`.txt` files | SWAT 2012 `.pcp` |
-| `TmpConverter` | master CSV + raw `.day`/`.txt` files | SWAT 2012 `.tmp` |
-| `SWATPlusWeatherConverter` | master CSV + merged station CSVs | SWAT+ `.pcp`/`.tmp`/etc |
+| `StationWeatherConverter` | pcp/tmp master file(s) + raw per-station data dir(s) | `WeatherResult` (write with `WeatherWriter` or `SWATPlusWeatherWriter`) |
 
-All converters return typed result objects with `files_written` and `qa: list[QACheck]`.
+CLI: `swatprep convert weather --pcp-master ... --pcp-dir ... --tmp-master ...
+--tmp-dir ... --target swat2012|swatplus OUT_DIR` (see `swatprep/cli.py`'s
+`convert_weather` command). This replaced the earlier `convert pcp`/
+`convert tmp`/`convert swatplus` commands and the `PCPConverter`/
+`TmpConverter`/`SWATPlusWeatherConverter` classes they used, which no longer
+exist.
+
+Most converters return typed result objects with `files_written` and
+`qa: list[QACheck]`. `StationWeatherConverter` is the exception — it only
+reads raw station files and returns a `WeatherResult` (no `files_written`;
+still has `.qa`), since writing is delegated to `WeatherWriter`/
+`SWATPlusWeatherWriter`.
 
 ## SWAT File Format Notes
 
-**SWAT 2012** (`.pcp`, `.tmp`):
-- 4-line header: title / `Lati {lat}` / `Long {lon}` / `Elev {elev}`
-- Line 5: start date `YYYYMMDD`
-- Data lines: `%10.3f` per value (two columns for temperature)
+**SWAT 2012** (per-station file `pcp_<name>.txt` / `tmp_<name>.txt`, written
+by `writers/weather.py`'s `WeatherWriter`):
+- No metadata header block (no title / `Lati` / `Long` / `Elev` lines).
+- Line 1: start date `YYYYMMDD` — the date of the **first** data record, not
+  offset by a day.
+- Data lines: compact values, no fixed-width padding (pcp: one value per
+  line; tmp: `tmin,tmax` per line).
+- Station metadata (`ID,NAME,LAT,LONG,ELEVATION`, uppercase) lives in a
+  separate `master_pcp.txt` / `master_tmp.txt`, not in the per-station file.
+- This matches the real SWAT2012 vendor-data convention; see
+  `docs/WEATHER_OUTPUT.md` for the full format reference.
 
-**SWAT+** (`.pcp`, `.tmp`, `.hmd`, `.slr`, `.wnd`):
+**SWAT+** (`.pcp`, `.tmp`, `.hmd`, `.slr`, `.wnd`, written by
+`writers/weather_plus.py`'s `SWATPlusWeatherWriter`):
 - Line 1: descriptive title
 - Line 2: `nbyr     tstep       lat       lon      elev`
 - Line 3: `{nbyr:4d}{0:10d}{lat:10.3f}{lon:10.3f}{elev:10.3f}`
 - Data lines: `{year:4d}{doy:5d}{val:11.5f}  ` (2 trailing spaces required by
   SWAT+ Editor format)
 - Temperature data: `{year:4d}{doy:5d}{tmax:11.5f} {tmin:11.5f}  `
+- `SWATPlusWeatherWriter` also writes `weather-sta.cli` (station registry)
+  and `weather-wgn.cli` (WGN statistics in SWAT+'s fixed format) — the
+  linking files a `TxtInOut` folder actually reads to resolve each station's
+  climate data.
 
 ## WGN Monthly Statistics
 

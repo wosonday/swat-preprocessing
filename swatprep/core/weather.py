@@ -36,6 +36,57 @@ class WeatherResult:
     qa: list[QACheck] = field(default_factory=list)
 
 
+def compute_wgn_stats(
+    stations: pd.DataFrame,
+    daily: dict[str, pd.DataFrame],
+    qa: list[QACheck],
+) -> pd.DataFrame:
+    """Compute SWAT weather generator monthly statistics per station.
+
+    Parameters computed following Neitsch et al. (2011) SWAT Theoretical
+    Documentation, Chapter 1 (Climate).
+
+    `stations` is accepted for interface symmetry with the rest of the
+    pipeline but is not read here — WGN stats are derived purely from the
+    daily variable columns. Shared by WeatherPreprocessor and
+    StationWeatherConverter so both compute WGN stats identically.
+    """
+    precip_wide = daily.get("precip")
+    tmax_wide   = daily.get("tmax")
+    tmin_wide   = daily.get("tmin")
+    solar_wide  = daily.get("solar")
+    rhum_wide   = daily.get("humidity")
+    wind_wide   = daily.get("wind")
+
+    station_ids = sorted(
+        set(precip_wide.columns if precip_wide is not None else [])
+        | set(tmax_wide.columns if tmax_wide is not None else [])
+    )
+
+    rows = []
+    for sid in station_ids:
+        p     = precip_wide[sid] if (precip_wide is not None and sid in precip_wide) else None
+        tx    = tmax_wide[sid]   if (tmax_wide   is not None and sid in tmax_wide)   else None
+        tn    = tmin_wide[sid]   if (tmin_wide   is not None and sid in tmin_wide)   else None
+        solar = solar_wide[sid]  if (solar_wide  is not None and sid in solar_wide)  else None
+        rhum  = rhum_wide[sid]   if (rhum_wide   is not None and sid in rhum_wide)   else None
+        wind  = wind_wide[sid]   if (wind_wide   is not None and sid in wind_wide)   else None
+
+        for month in range(1, 13):
+            row: dict = {"station_id": sid, "month": month}
+            _fill_temp_stats(row, tx, tn, month)
+            _fill_precip_stats(row, p, month)
+            _fill_climate_stats(row, solar, rhum, wind, tx, tn, month)
+            rows.append(row)
+
+    qa.append(QACheck(
+        name="wgn_computed",
+        status="pass",
+        message=f"WGN stats computed for {len(station_ids)} station(s) × 12 months",
+    ))
+    return pd.DataFrame(rows)
+
+
 class WeatherPreprocessor:
     """Load, validate, and compute WGN monthly statistics from station CSVs.
 
@@ -70,7 +121,7 @@ class WeatherPreprocessor:
             precip_stations = all_stations
             temp_stations = all_stations
 
-        wgn = self._compute_wgn(all_stations, daily, qa)
+        wgn = compute_wgn_stats(all_stations, daily, qa)
         return WeatherResult(
             stations=all_stations,
             precip_stations=precip_stations,
@@ -293,53 +344,3 @@ class WeatherPreprocessor:
             ),
         ))
         return daily
-
-    # ------------------------------------------------------------------
-    # WGN statistics
-    # ------------------------------------------------------------------
-
-    def _compute_wgn(
-        self,
-        stations: pd.DataFrame,
-        daily: dict[str, pd.DataFrame],
-        qa: list[QACheck],
-    ) -> pd.DataFrame:
-        """Compute SWAT weather generator monthly statistics per station.
-
-        Parameters computed following Neitsch et al. (2011) SWAT Theoretical
-        Documentation, Chapter 1 (Climate).
-        """
-        precip_wide = daily.get("precip")
-        tmax_wide   = daily.get("tmax")
-        tmin_wide   = daily.get("tmin")
-        solar_wide  = daily.get("solar")
-        rhum_wide   = daily.get("humidity")
-        wind_wide   = daily.get("wind")
-
-        station_ids = list(
-            set(precip_wide.columns if precip_wide is not None else [])
-            | set(tmax_wide.columns if tmax_wide is not None else [])
-        )
-
-        rows = []
-        for sid in station_ids:
-            p     = precip_wide[sid] if (precip_wide is not None and sid in precip_wide) else None
-            tx    = tmax_wide[sid]   if (tmax_wide   is not None and sid in tmax_wide)   else None
-            tn    = tmin_wide[sid]   if (tmin_wide   is not None and sid in tmin_wide)   else None
-            solar = solar_wide[sid]  if (solar_wide  is not None and sid in solar_wide)  else None
-            rhum  = rhum_wide[sid]   if (rhum_wide   is not None and sid in rhum_wide)   else None
-            wind  = wind_wide[sid]   if (wind_wide   is not None and sid in wind_wide)   else None
-
-            for month in range(1, 13):
-                row: dict = {"station_id": sid, "month": month}
-                _fill_temp_stats(row, tx, tn, month)
-                _fill_precip_stats(row, p, month)
-                _fill_climate_stats(row, solar, rhum, wind, tx, tn, month)
-                rows.append(row)
-
-        qa.append(QACheck(
-            name="wgn_computed",
-            status="pass",
-            message=f"WGN stats computed for {len(station_ids)} station(s) × 12 months",
-        ))
-        return pd.DataFrame(rows)
