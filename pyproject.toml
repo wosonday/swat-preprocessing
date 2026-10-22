@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swatprep"
-version = "0.1.0"
+version = "0.2.0"
 description = "Preprocess raw geospatial and hydro-meteorological data for SWAT/SWAT+ workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,6 +17,7 @@ dependencies = [
     "pyyaml>=6.0",
     "xarray>=2025.6.1",
     "netcdf4>=1.7.3",
+    "rasterio>=1.4.4",
 ]
 
 [project.optional-dependencies]

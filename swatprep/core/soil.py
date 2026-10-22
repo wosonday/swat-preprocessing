@@ -12,12 +12,15 @@ Minimal required SWAT usersoil columns (Arnold et al. 2012):
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pandas as pd
 
 from ..config import SoilConfig
 from ..errors import InputValidationError
 from ..qa import QACheck
+from ..utils.raster import resolve_window, unique_codes
+from .clip import basin_rows
 
 try:
     import rasterio  # type: ignore
@@ -43,14 +46,18 @@ class SoilResult:
 class SoilPreprocessor:
     """Validate soil parameter table and cross-check unique raster codes."""
 
-    def __init__(self, cfg: SoilConfig) -> None:
+    def __init__(self, cfg: SoilConfig, boundary: Path | None = None) -> None:
         self.cfg = cfg
+        self.boundary = boundary  # project.boundary: codes read only inside its window
+        self._windowed = False  # True once the boundary window was actually applied
 
     def run(self) -> SoilResult:
         qa: list[QACheck] = []
         table = self._load_table(qa)
         raster_codes = self._read_raster_codes(qa)
         unmatched = self._cross_check(table, raster_codes, qa)
+        if self._windowed and raster_codes:
+            table = basin_rows(table, self.cfg.soil_key_col, raster_codes, "soil", qa)
         return SoilResult(
             soil_table=table,
             raster_codes=raster_codes,
@@ -115,18 +122,11 @@ class SoilPreprocessor:
             ))
             return None
 
-        import numpy as np
-
         try:
             with rasterio.open(self.cfg.raster) as ds:
-                data = ds.read(1)
-                nodata = ds.nodata
-                mask = (
-                    (data != int(nodata))
-                    if nodata is not None
-                    else np.ones_like(data, bool)
-                )
-                codes = set(data[mask].flatten().tolist())
+                window = resolve_window(ds, self.boundary, qa, "soil")
+                codes = unique_codes(ds, window=window)
+                self._windowed = window is not None
         except Exception as exc:
             qa.append(QACheck(
                 name="soil_raster_read_failed",

@@ -39,7 +39,7 @@ class PrepareResult:
         return self.error_count == 0
 
 
-_VALID_DOMAINS = ("dem", "landuse", "soil", "weather", "streamflow")
+_VALID_DOMAINS = ("clip", "dem", "landuse", "soil", "weather", "streamflow")
 
 
 class SWATPrepProject:
@@ -73,14 +73,24 @@ class SWATPrepProject:
 
         domains_to_run = [only] if only else cfg.configured_domains()
 
+        if "clip" in domains_to_run and cfg.clip is not None:
+            from .core.clip import ClipProcessor
+
+            result = ClipProcessor(cfg.clip, cfg.project.boundary).run()
+            all_qa.extend(result.qa)
+            domains_run.append("clip")
+
         # ------------------------------------------------------------------ #
         # DEM                                                                  #
         # ------------------------------------------------------------------ #
         if "dem" in domains_to_run and cfg.dem is not None:
+            from .core.clip import clip_into_output
             from .core.dem import DEMPreprocessor
             from .writers.spatial import SpatialWriter
 
-            result = DEMPreprocessor(cfg.dem, project_crs=cfg.project.crs).run()
+            boundary = clip_into_output(cfg.dem.path, cfg.dem.output_name, output_dir / "spatial",
+                                        cfg.project.boundary, cfg.dem.clip, all_qa)
+            result = DEMPreprocessor(cfg.dem, project_crs=cfg.project.crs, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("dem")
 
@@ -97,10 +107,14 @@ class SWATPrepProject:
         # LandUse                                                              #
         # ------------------------------------------------------------------ #
         if "landuse" in domains_to_run and cfg.landuse is not None:
+            from .core.clip import clip_into_output
             from .core.landuse import LandUsePreprocessor
             from .writers.landuse import LandUseWriter
 
-            result = LandUsePreprocessor(cfg.landuse).run()
+            lu = cfg.landuse
+            boundary = clip_into_output(lu.raster, lu.output_name, output_dir / "landuse",
+                                        cfg.project.boundary, lu.clip, all_qa)
+            result = LandUsePreprocessor(lu, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("landuse")
 
@@ -116,10 +130,14 @@ class SWATPrepProject:
         # Soil                                                                 #
         # ------------------------------------------------------------------ #
         if "soil" in domains_to_run and cfg.soil is not None:
+            from .core.clip import clip_into_output
             from .core.soil import SoilPreprocessor
             from .writers.soil import SoilWriter
 
-            result = SoilPreprocessor(cfg.soil).run()
+            so = cfg.soil
+            boundary = clip_into_output(so.raster, so.output_name, output_dir / "soil",
+                                        cfg.project.boundary, so.clip, all_qa)
+            result = SoilPreprocessor(so, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("soil")
 
@@ -225,6 +243,8 @@ class SWATPrepProject:
 
         if cfg.project.boundary is not None:
             _check_path(cfg.project.boundary, "project.boundary", checks)
+        for i, item in enumerate(cfg.clip or []):
+            _check_path(item.src, f"clip[{i}].src", checks)
         if cfg.dem:
             _check_path(cfg.dem.path, "dem.path", checks)
         if cfg.landuse:
@@ -246,6 +266,12 @@ class SWATPrepProject:
                 _check_path(cfg.weather.temp.data_dir, "weather.temp.data_dir", checks)
         if cfg.streamflow:
             _check_path(cfg.streamflow.path, "streamflow.path", checks)
+
+        # a file that `clip` will create is not missing yet
+        made = {item.dst for item in cfg.clip or []}
+        for c in checks:
+            if c.status == "fail" and Path(c.context.get("path", "")) in made:
+                c.status, c.message = "pass", f"{c.context['path']} (will be created by clip)"
 
         return checks
 

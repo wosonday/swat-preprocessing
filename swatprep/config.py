@@ -34,7 +34,15 @@ class ProjectConfig(BaseModel):
 
 class DEMConfig(BaseModel):
     path: Path
-    output_name: str = "dem_projected.tif"
+    output_name: str = "dem_projected.tif"  # clipped DEM written to <output_dir>/spatial/
+    clip: bool = True  # crop to project.boundary (needs boundary); False = whole raster
+
+
+class ClipItemConfig(BaseModel):
+    """One raster to crop to project.boundary: read `src`, write `dst`."""
+    src: Path
+    dst: Path
+    mask: bool = False  # also set pixels outside the polygons to NoData
 
 
 class LandUseConfig(BaseModel):
@@ -43,6 +51,8 @@ class LandUseConfig(BaseModel):
     source_code_col: str = "code"
     swat_code_col: str = "swat_code"
     swat_name_col: str = "swat_name"
+    output_name: str = "landuse_clip.tif"  # written to <output_dir>/landuse/
+    clip: bool = True  # crop to project.boundary and keep only the basin's classes
 
 
 class SoilConfig(BaseModel):
@@ -50,6 +60,8 @@ class SoilConfig(BaseModel):
     table: Path  # CSV or SQLite with physical soil parameters
     soil_key_col: str = "soil_id"
     output_usersoil: bool = True
+    output_name: str = "soil_clip.tif"  # written to <output_dir>/soil/
+    clip: bool = True  # crop to project.boundary and keep only the basin's soils
 
 
 class WeatherUnitsConfig(BaseModel):
@@ -74,6 +86,7 @@ class FillNetCDFConfig(BaseModel):
     lat_name: str = "auto"
     lon_name: str = "auto"
     time_name: str = "auto"
+    search_radius: int = Field(default=1, ge=0, le=5)  # ô lân cận nếu ô gần nhất không có dữ liệu
 
     @model_validator(mode="after")
     def validate_var_map(self) -> "FillNetCDFConfig":
@@ -172,11 +185,18 @@ class StreamflowConfig(BaseModel):
 
 class SWATPrepConfig(BaseModel):
     project: ProjectConfig
+    clip: Optional[list[ClipItemConfig]] = Field(default=None, min_length=1)
     dem: Optional[DEMConfig] = None
     landuse: Optional[LandUseConfig] = None
     soil: Optional[SoilConfig] = None
     weather: Optional[WeatherConfig] = None
     streamflow: Optional[StreamflowConfig] = None
+
+    @model_validator(mode="after")
+    def clip_needs_boundary(self) -> "SWATPrepConfig":
+        if self.clip and self.project.boundary is None:
+            raise ValueError("'clip' needs project.boundary to be set")
+        return self
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "SWATPrepConfig":
@@ -195,7 +215,7 @@ class SWATPrepConfig(BaseModel):
         """Return the list of optional domains that are configured."""
         return [
             name
-            for name in ("dem", "landuse", "soil", "weather", "streamflow")
+            for name in ("clip", "dem", "landuse", "soil", "weather", "streamflow")
             if getattr(self, name) is not None
         ]
 
@@ -220,6 +240,12 @@ class SWATPrepConfig(BaseModel):
             value: Optional[Path] = getattr(section, field_name)
             if value is not None and not value.is_absolute():
                 setattr(section, field_name, base_dir / value)
+
+        for item in self.clip or []:
+            for field_name in ("src", "dst"):
+                value = getattr(item, field_name)
+                if not value.is_absolute():
+                    setattr(item, field_name, base_dir / value)
 
         # Resolve sub-source paths for weather.precip / weather.temp
         if self.weather is not None:

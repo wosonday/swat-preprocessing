@@ -14,6 +14,8 @@ import pandas as pd
 from ..config import LandUseConfig
 from ..errors import InputValidationError
 from ..qa import QACheck
+from ..utils.raster import resolve_window, unique_codes
+from .clip import basin_rows
 
 try:
     import rasterio  # type: ignore
@@ -37,19 +39,24 @@ class LandUseResult:
 class LandUsePreprocessor:
     """Validate land-use lookup table and cross-check unique raster codes."""
 
-    def __init__(self, cfg: LandUseConfig) -> None:
+    def __init__(self, cfg: LandUseConfig, boundary: Path | None = None) -> None:
         self.cfg = cfg
+        self.boundary = boundary  # project.boundary: codes read only inside its window
+        self._windowed = False  # True once the boundary window was actually applied
 
     def run(self) -> LandUseResult:
         qa: list[QACheck] = []
         lookup = self._load_lookup(qa)
         raster_codes = self._read_raster_codes(qa)
         unmatched = self._cross_check(lookup, raster_codes, qa)
+        mapping = _build_class_id_mapping(lookup, self.cfg.source_code_col)  # ids of the full table
+        if self._windowed and raster_codes:
+            lookup = basin_rows(lookup, self.cfg.source_code_col, raster_codes, "landuse", qa)
         return LandUseResult(
             raster_path=self.cfg.raster,
             lookup=lookup,
             raster_codes=raster_codes,
-            code_mapping=_build_class_id_mapping(lookup, self.cfg.source_code_col),
+            code_mapping=mapping,
             unmatched_codes=unmatched,
             qa=qa,
         )
@@ -97,17 +104,11 @@ class LandUsePreprocessor:
             ))
             return None
 
-        import numpy as np
-
         try:
             with rasterio.open(self.cfg.raster) as ds:
-                data = ds.read(1)
-                nodata = ds.nodata
-                if nodata is not None:
-                    mask = data != int(nodata)
-                else:
-                    mask = np.ones_like(data, dtype=bool)
-                codes = set(data[mask].flatten().tolist())
+                window = resolve_window(ds, self.boundary, qa, "landuse")
+                codes = unique_codes(ds, window=window)
+                self._windowed = window is not None
         except Exception as exc:
             qa.append(QACheck(
                 name="landuse_raster_read_failed",

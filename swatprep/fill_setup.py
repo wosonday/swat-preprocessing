@@ -67,6 +67,7 @@ def resolve_fill_inputs(o: dict) -> FillInputs:
         "lat_name": o.get("fill_lat_name"),
         "lon_name": o.get("fill_lon_name"),
         "time_name": o.get("fill_time_name"),
+        "search_radius": o.get("fill_search_radius"),
         "var_map": parse_var_map(o["fill_var_map"]) if o.get("fill_var_map") else None,
     })
     fill["csv"], fill["netcdf"] = csv or None, nc or None
@@ -91,4 +92,4 @@ def _build_source(fill_cfg: WeatherFillConfig, real_cfg: WeatherConfig) -> FillS
         stations=csv.stations, data_dir=csv.data_dir, file_pattern=csv.file_pattern,
         variables=real_cfg.variables, start=real_cfg.start, end=real_cfg.end,
         missing_policy="warn",
-    ))
+    ))

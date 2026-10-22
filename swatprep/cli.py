@@ -10,6 +10,7 @@ Commands:
     swatprep convert climate DATA_DIR OUT_DIR
     swatprep convert streamflow SOURCE OUT_PATH
     swatprep convert weather [--pcp-master ... --pcp-dir ...] [--tmp-master ... --tmp-dir ...] OUT_DIR
+    swatprep clip RASTER BOUNDARY OUT_PATH [--mask]
     swatprep fill weather --stations ... --data-dir ... --fill-stations ... --fill-data-dir ... OUT_DIR
 """
 
@@ -79,7 +80,7 @@ def validate(config: Path) -> None:
 # build
 # ---------------------------------------------------------------------------
 
-_DOMAINS = ("dem", "landuse", "soil", "weather", "streamflow")
+_DOMAINS = ("clip", "dem", "landuse", "soil", "weather", "streamflow")
 
 
 @main.command()
@@ -361,6 +362,36 @@ def convert_weather(
 
 
 # ---------------------------------------------------------------------------
+# clip
+# ---------------------------------------------------------------------------
+
+
+@main.command()
+@click.argument("raster", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("boundary", type=click.Path(exists=True, path_type=Path))
+@click.argument("out_path", type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--mask", is_flag=True,
+              help="Also set pixels outside the boundary polygons to NoData (default: bbox crop only).")
+def clip(raster: Path, boundary: Path, out_path: Path, mask: bool) -> None:
+    """Crop RASTER to the extent of BOUNDARY and write the GeoTIFF OUT_PATH.
+
+    Reads only the needed window strip by strip, so huge rasters are fine.
+    No resampling or reprojection of the raster is done.
+    """
+    try:
+        from .utils.raster import clip_raster
+
+        clip_raster(raster, out_path, boundary, mask=mask)
+    except ImportError:
+        click.echo("Install swatprep[geo] to clip rasters.", err=True)
+        sys.exit(1)
+    except SWATPrepError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+    click.echo(f"Clipped raster written: {out_path}")
+
+
+# ---------------------------------------------------------------------------
 # fill
 # ---------------------------------------------------------------------------
 
@@ -392,6 +423,8 @@ def fill() -> None:
 @click.option("--fill-lat-name", default=None, help="(netcdf) Latitude axis name [auto].")
 @click.option("--fill-lon-name", default=None, help="(netcdf) Longitude axis name [auto].")
 @click.option("--fill-time-name", default=None, help="(netcdf) Time axis name [auto].")
+@click.option("--fill-search-radius", type=click.IntRange(0, 5), default=None,
+              help="(netcdf) If the nearest cell has no data, search this many cells around [1].")
 @click.option("--variables", default=None,
               help="Comma-separated list from: precip,tmax,tmin,wind,solar,humidity "
                    "[precip,tmax,tmin].")

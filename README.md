@@ -135,6 +135,57 @@ swatprep fill weather \
 
 Point `weather.data_dir` at `OUT_DIR` and run `swatprep build` as normal.
 
+The fill source can also be a daily gridded NetCDF (`--fill-netcdf FILE.nc
+--fill-var-map precip=pr,tmax=tasmax,tmin=tasmin`, or the `weather.fill` YAML
+block). The value of the grid cell nearest to each station is used; a station
+exactly halfway between two cells takes the lower-index cell. If that cell has
+no data (e.g. a sea cell), the nearest cell with data within `search_radius`
+cells (default 1, `--fill-search-radius`) is used and a warning is reported.
+
+### Clip a large raster to the basin
+
+```bash
+swatprep clip DEM.tif BOUNDARY.shp DEM_clip.tif          # crop to the boundary's bbox
+swatprep clip LANDUSE.tif BOUNDARY.shp LU_clip.tif --mask  # also NoData outside the polygon
+```
+
+Needs `swatprep[geo]`. The raster is read strip by strip (bounded memory), the
+boundary is reprojected to the raster CRS, and no resampling is done. Point
+`dem.path` / `landuse.raster` / `soil.raster` at the clipped files before `build`.
+
+The same can be done from `config.yaml` (needs `project.boundary`); `build` crops each
+`src` to the boundary and writes `dst` (relative paths are relative to the YAML file),
+before the other domains run, and skips a `dst` that is newer than its `src` and the boundary:
+
+```yaml
+clip:
+  - src: D:/DATA/dem_asia.tif
+    dst: ./data/spatial/dem_chu.tif
+  - src: D:/DATA/landuse.tif
+    dst: ./data/spatial/landuse_chu.tif
+    mask: true          # optional: NoData outside the polygon (default false)
+dem:
+  path: ./data/spatial/dem_chu.tif      # use the clipped file
+```
+
+Run only this step with `swatprep build config.yaml --only clip`.
+
+If `project.boundary` is set, `swatprep build` clips the `dem`, `landuse` and `soil` rasters
+to it **in the same run and into the same `output_dir`**, with nothing extra to configure:
+
+| Section | Clipped raster written to | Table written (restricted to the basin) |
+|---|---|---|
+| `dem` | `<output_dir>/spatial/<output_name>` (default `dem_projected.tif`) | `spatial/dem_info.json` |
+| `landuse` | `<output_dir>/landuse/<output_name>` (default `landuse_clip.tif`) | `landuse/landuse_lookup.csv`: only classes present in the basin |
+| `soil` | `<output_dir>/soil/<output_name>` (default `soil_clip.tif`) | `soil/usersoil.csv`: only soils present in the basin |
+
+Checks and statistics describe the basin (only the boundary's window is read), and huge
+regional rasters are never loaded whole. Each section accepts `clip: false` to turn this
+off (whole raster scanned, full tables, no clipped file). The raster is cropped to the
+boundary's bounding box and keeps its CRS (no reprojection). A clipped file that is newer
+than its source and the boundary is not rewritten. If the boundary cannot be applied
+(no `geopandas`, no CRS, no overlap) a warning or failed check is reported.
+
 ## Python API
 
 ```python

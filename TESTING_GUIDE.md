@@ -33,10 +33,10 @@ python -m pytest -v
 
 **Kết quả mong đợi:**
 ```
-136 passed, 3 skipped in ~3s
+198 passed in ~5s   (đã cài .[geo], xarray, netCDF4)
 ```
 
-3 test skip là do yêu cầu `rasterio` (cài với `pip install -e ".[geo]"`).
+Nếu chưa cài `rasterio`/`geopandas` (`pip install -e ".[geo]"`), các test raster và `clip` sẽ bị skip.
 
 ### 2.1 Chạy từng module test
 

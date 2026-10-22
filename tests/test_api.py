@@ -84,5 +84,5 @@ def test_example_config_builds_end_to_end(tmp_dir):
     assert (cfg.project.output_dir / "spatial" / "dem_info.json").exists()
     assert (cfg.project.output_dir / "landuse" / "landuse_lookup.csv").exists()
     assert (cfg.project.output_dir / "soil" / "usersoil.csv").exists()
-    assert (cfg.project.output_dir / "weather" / "ST001.pcp").exists()
+    assert (cfg.project.output_dir / "weather" / "StationA.pcp").exists()
     assert (cfg.project.output_dir / "observed" / "streamflow_ST001.csv").exists()

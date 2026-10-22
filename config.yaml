@@ -11,15 +11,15 @@ project:
   boundary: "./data/boundary.shp"    # project boundary
   output_dir: "./output"
   targets:
-    - "swatplus"                     # "swat" | "swatplus" | both
+    - "swat"                     # "swat" | "swatplus" | both
 
 dem:
   path: "./data/dem/hdr.adf"
   output_name: "dem_projected.tif"
 
 landuse:
-  raster: "./data/landuse/hdr.adf"
-  lookup: "./data/landuse_lookup.csv"
+  raster: "D:/DATA_STORAGE/_data/2_LandUse/esa-worldcover/vietnam_worldcover_2021.tif"
+  lookup: "D:/DATA_STORAGE/_data/2_LandUse/esa2021_landuse.csv"
   source_code_col: "LANDUSE_ID"
   swat_code_col: "SWAT_CODE"
   swat_name_col: "SWAT_CODE"
@@ -48,7 +48,7 @@ weather:
     type: netcdf
     output_dir: ./data/filled
     netcdf:
-      path: ./data/gridded_daily.nc
+      path: D:/DATA_STORAGE/_data/4_Weather/OBS.Vietnam.1980-2014.nc
       var_map: { precip: pr, tmax: tasmax, tmin: tasmin }
   units:
     precip: "mm"

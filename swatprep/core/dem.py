@@ -18,6 +18,7 @@ from pathlib import Path
 
 from ..config import DEMConfig
 from ..qa import QACheck
+from ..utils.raster import masked_stats, resolve_window
 
 try:
     import rasterio  # type: ignore
@@ -43,9 +44,12 @@ class DEMResult:
 class DEMPreprocessor:
     """Validate a DEM raster for SWAT/SWAT+ use."""
 
-    def __init__(self, cfg: DEMConfig, project_crs: str | None = None) -> None:
+    def __init__(
+        self, cfg: DEMConfig, project_crs: str | None = None, boundary: Path | None = None,
+    ) -> None:
         self.cfg = cfg
         self.project_crs = project_crs
+        self.boundary = boundary  # project.boundary: statistics limited to its window
 
     def run(self) -> DEMResult:
         qa: list[QACheck] = []
@@ -138,8 +142,9 @@ class DEMPreprocessor:
                 ))
 
             # Elevation statistics
-            data = ds.read(1, masked=True)
-            if data.count() == 0:
+            window = resolve_window(ds, self.boundary, qa, "dem")
+            elev_min, elev_max, elev_mean, n_valid = masked_stats(ds, window=window)
+            if n_valid == 0:
                 qa.append(QACheck(
                     name="dem_all_nodata",
                     status="fail",
@@ -151,10 +156,6 @@ class DEMPreprocessor:
                     resolution=resolution, elevation_range=None,
                     nodata=nodata, qa=qa,
                 )
-
-            elev_min = float(data.min())
-            elev_max = float(data.max())
-            elev_mean = float(data.mean())
 
             if elev_min >= elev_max:
                 qa.append(QACheck(

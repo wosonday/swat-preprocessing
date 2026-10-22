@@ -437,6 +437,7 @@ class TestCLIFillWeather:
         res = runner.invoke(main, ["fill", "weather", "--help"])
         assert res.exit_code == 0
         assert "--fill-stations" in res.output
+        assert "--fill-search-radius" in res.output
 
     def test_cli_fill_weather_runs_end_to_end(self, tmp_path):
         from click.testing import CliRunner
