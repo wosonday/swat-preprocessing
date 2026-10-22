@@ -44,6 +44,12 @@ weather:
     - "tmin"
   start: "1981-01-01"
   end: "2019-12-31"
+  fill:
+    type: netcdf
+    output_dir: ./data/filled
+    netcdf:
+      path: ./data/gridded_daily.nc
+      var_map: { precip: pr, tmax: tasmax, tmin: tasmin }
   units:
     precip: "mm"
     temperature: "degC"

@@ -371,66 +371,52 @@ def fill() -> None:
 
 
 @fill.command("weather")
-@click.option("--stations", type=click.Path(exists=True, path_type=Path), required=True,
+@click.option("--config", "config", type=click.Path(exists=True, path_type=Path), default=None,
+              help="YAML config: reads the weather block and weather.fill (flags override it).")
+@click.option("--stations", type=click.Path(exists=True, path_type=Path), default=None,
               help="Station metadata CSV for the real (observed) data (id,name,lat,lon,elev).")
-@click.option("--data-dir", type=click.Path(exists=True, path_type=Path), required=True,
+@click.option("--data-dir", type=click.Path(exists=True, path_type=Path), default=None,
               help="Directory of real per-station daily CSVs.")
-@click.option("--file-pattern", default="{id}.csv", show_default=True,
-              help="Filename pattern for real station files.")
-@click.option("--fill-stations", type=click.Path(exists=True, path_type=Path), required=True,
-              help="Station metadata CSV for the external fill source (same station ids as --stations).")
-@click.option("--fill-data-dir", type=click.Path(exists=True, path_type=Path), required=True,
-              help="Directory of external fill-source per-station daily CSVs.")
-@click.option("--fill-file-pattern", default="{id}.csv", show_default=True,
-              help="Filename pattern for fill-source station files.")
-@click.option("--variables", default="precip,tmax,tmin", show_default=True,
-              help="Comma-separated list from: precip,tmax,tmin,wind,solar,humidity.")
-@click.option("--start", required=True, help="ISO start date (YYYY-MM-DD).")
-@click.option("--end", required=True, help="ISO end date (YYYY-MM-DD).")
-@click.option("--min-overlap-days", default=10, show_default=True, type=int,
-              help="Minimum overlapping days needed to trust a bias correction.")
-@click.argument("out_dir", type=click.Path(path_type=Path))
-def fill_weather(
-    stations: Path,
-    data_dir: Path,
-    file_pattern: str,
-    fill_stations: Path,
-    fill_data_dir: Path,
-    fill_file_pattern: str,
-    variables: str,
-    start: str,
-    end: str,
-    min_overlap_days: int,
-    out_dir: Path,
-) -> None:
+@click.option("--file-pattern", default=None, help="Real station filename pattern [{id}.csv].")
+@click.option("--fill-source-type", type=click.Choice(["csv", "netcdf"]), default=None,
+              help="Fill source kind [csv].")
+@click.option("--fill-stations", type=click.Path(exists=True, path_type=Path), default=None,
+              help="(csv) Station metadata CSV of the fill source (same station ids).")
+@click.option("--fill-data-dir", type=click.Path(exists=True, path_type=Path), default=None,
+              help="(csv) Directory of fill-source per-station daily CSVs.")
+@click.option("--fill-file-pattern", default=None, help="(csv) Fill filename pattern [{id}.csv].")
+@click.option("--fill-netcdf", type=click.Path(exists=True, path_type=Path), default=None,
+              help="(netcdf) Daily gridded NetCDF in mm / degC; value of the nearest cell is used.")
+@click.option("--fill-var-map", default=None,
+              help="(netcdf) swatprep=ncvar pairs, e.g. precip=pr,tmax=tasmax,tmin=tasmin.")
+@click.option("--fill-lat-name", default=None, help="(netcdf) Latitude axis name [auto].")
+@click.option("--fill-lon-name", default=None, help="(netcdf) Longitude axis name [auto].")
+@click.option("--fill-time-name", default=None, help="(netcdf) Time axis name [auto].")
+@click.option("--variables", default=None,
+              help="Comma-separated list from: precip,tmax,tmin,wind,solar,humidity "
+                   "[precip,tmax,tmin].")
+@click.option("--start", default=None, help="ISO start date (YYYY-MM-DD).")
+@click.option("--end", default=None, help="ISO end date (YYYY-MM-DD).")
+@click.option("--min-overlap-days", default=None, type=int,
+              help="Minimum overlapping days needed to trust a bias correction [10].")
+@click.argument("out_dir", type=click.Path(path_type=Path), required=False)
+def fill_weather(out_dir: Path | None, **options) -> None:
     """Fill missing days in observed weather station data from an external
-    bias-corrected source, writing swatprep-ready per-station CSVs.
+    bias-corrected source (CSV or NetCDF), writing swatprep-ready CSVs.
 
-    Computes one overall bias-correction value per station per variable from
-    the days where both --data-dir and --fill-data-dir have data (ratio for
-    precip, additive offset otherwise), then fills only the real station's
-    missing days. A day the real station already has is never overwritten.
-
-    OUT_DIR   Directory where filled station CSVs + fill_report.csv are written.
+    OUT_DIR   Where filled CSVs + fill_report.csv are written (or set
+              weather.fill.output_dir in the YAML given by --config).
     """
     try:
-        from .config import WeatherConfig
         from .core.weather_fill import WeatherGapFiller
-        from .writers.weather_fill import WeatherFillWriter
+        from .fill_setup import resolve_fill_inputs
         from .qa import failures, warnings
+        from .writers.weather_fill import WeatherFillWriter
 
-        var_list = [v.strip() for v in variables.split(",") if v.strip()]
-
-        real_cfg = WeatherConfig(
-            stations=stations, data_dir=data_dir, file_pattern=file_pattern,
-            variables=var_list, start=start, end=end, missing_policy="warn",
-        )
-        fill_cfg = WeatherConfig(
-            stations=fill_stations, data_dir=fill_data_dir, file_pattern=fill_file_pattern,
-            variables=var_list, start=start, end=end, missing_policy="warn",
-        )
-
-        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=min_overlap_days).run()
+        inputs = resolve_fill_inputs({**options, "out_dir": out_dir})
+        result = WeatherGapFiller(
+            inputs.real_cfg, inputs.fill_source, min_overlap_days=inputs.min_overlap_days,
+        ).run()
 
         for c in result.qa:
             symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
@@ -441,10 +427,10 @@ def fill_weather(
             click.echo(f"Failed: {len(fail_list)} check(s).", err=True)
             sys.exit(1)
 
-        written = WeatherFillWriter(result, out_dir).write()
+        written = WeatherFillWriter(result, inputs.out_dir).write()
 
         click.echo(f"\nFiles written : {len(written)}")
-        click.echo(f"Output dir    : {out_dir}")
+        click.echo(f"Output dir    : {inputs.out_dir}")
 
         warn_list = warnings(result.qa)
         if warn_list:
@@ -456,7 +442,6 @@ def fill_weather(
     except SWATPrepError as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

@@ -18,6 +18,7 @@ import pandas as pd
 from ..config import WeatherConfig
 from ..qa import QACheck
 from .weather import WeatherPreprocessor
+from .fill_sources import CsvFillSource, FillSource
 
 _RATIO_VARS = {"precip"}
 
@@ -104,26 +105,32 @@ class WeatherGapFiller:
     """
 
     def __init__(
-        self,
-        real_cfg: WeatherConfig,
-        fill_cfg: WeatherConfig,
-        min_overlap_days: int = 10,
-    ) -> None:
+            self,
+            real_cfg: WeatherConfig,
+            fill_source: FillSource | WeatherConfig,
+            min_overlap_days: int = 10,
+            ) -> None:
+        if isinstance(fill_source, WeatherConfig):  # tương thích ngược
+            fill_source = CsvFillSource(fill_source)
         self.real_cfg = real_cfg
-        self.fill_cfg = fill_cfg
+        self.fill_source = fill_source
         self.min_overlap_days = min_overlap_days
 
     def run(self) -> WeatherFillResult:
         qa: list[QACheck] = []
         real_result = WeatherPreprocessor(self.real_cfg).run()
-        fill_result = WeatherPreprocessor(self.fill_cfg).run()
+        fill_daily, fill_qa = self.fill_source.load(
+            real_result.stations,
+            next(iter(real_result.daily.values())).index,
+            list(real_result.daily),
+            )
 
         # Propagate QA from both upstream WeatherPreprocessor runs (e.g. a
         # station's data file entirely missing, or missing a requested
         # variable column) instead of silently discarding it. Any "fail" is
         # downgraded to "warn" here -- one bad station in either source must
         # not block the rest of the gap-fill run.
-        for check in [*real_result.qa, *fill_result.qa]:
+        for check in [*real_result.qa, *fill_qa]:
             if check.status == "fail":
                 qa.append(replace(check, status="warn"))
             else:
@@ -133,7 +140,7 @@ class WeatherGapFiller:
         report_rows: list[dict] = []
 
         for var, obs_wide in real_result.daily.items():
-            fill_wide = fill_result.daily.get(var)
+            fill_wide = fill_daily.get(var)
             filled_wide = obs_wide.copy()
 
             for sid in obs_wide.columns:

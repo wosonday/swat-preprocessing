@@ -63,6 +63,45 @@ class WeatherSourceConfig(BaseModel):
     data_dir: Path  # directory; one CSV per station
     file_pattern: str = "{id}.csv"  # e.g. "{name}.csv" to match by station name
 
+class FillCSVConfig(BaseModel):
+    stations: Path
+    data_dir: Path
+    file_pattern: str = "{id}.csv"
+
+class FillNetCDFConfig(BaseModel):
+    path: Path
+    var_map: dict[str, str]
+    lat_name: str = "auto"
+    lon_name: str = "auto"
+    time_name: str = "auto"
+
+    @model_validator(mode="after")
+    def validate_var_map(self) -> "FillNetCDFConfig":
+        valid = {"precip", "tmax", "tmin", "wind", "solar", "humidity"}
+        bad = set(self.var_map) - valid
+        if not self.var_map or bad:
+            raise ValueError(
+                "weather.fill.netcdf.var_map must be non-empty with keys from "
+                f"{sorted(valid)}; invalid: {sorted(bad)}"
+                )
+        return self
+
+class WeatherFillConfig(BaseModel):
+    type: Literal["csv", "netcdf"] = "csv"
+    output_dir: Optional[Path] = None
+    min_overlap_days: int = Field(default=10, ge=0)
+    csv: Optional[FillCSVConfig] = None
+    netcdf: Optional[FillNetCDFConfig] = None
+
+    @model_validator(mode="after")
+    def validate_block_matches_type(self) -> "WeatherFillConfig":
+        if getattr(self, self.type) is None:
+            raise ValueError(
+                f"weather.fill.type is '{self.type}' but the "
+                f"weather.fill.{self.type} block is missing"
+            )
+        return self
+
 
 class WeatherConfig(BaseModel):
     stations: Optional[Path] = None   # CSV: id, name, lat, lon, elev (default for all)
@@ -78,6 +117,7 @@ class WeatherConfig(BaseModel):
     end: date    # ISO "YYYY-MM-DD"
     units: WeatherUnitsConfig = Field(default_factory=WeatherUnitsConfig)
     missing_policy: Literal["fail", "warn"] = "fail"
+    fill: Optional[WeatherFillConfig] = None  # chỉ dùng cho `swatprep fill weather`
 
     @model_validator(mode="after")
     def validate_date_range(self) -> "WeatherConfig":
@@ -191,3 +231,15 @@ class SWATPrepConfig(BaseModel):
                     value = getattr(sub, field_name)
                     if value is not None and not value.is_absolute():
                         setattr(sub, field_name, base_dir / value)
+
+        fill = self.weather.fill if self.weather is not None else None
+        if fill is not None:
+            targets = [(fill, "output_dir")]
+            if fill.csv is not None:
+                targets += [(fill.csv, "stations"), (fill.csv, "data_dir")]
+            if fill.netcdf is not None:
+                targets += [(fill.netcdf, "path")]
+            for obj, field_name in targets:
+                value = getattr(obj, field_name)
+                if value is not None and not value.is_absolute():
+                    setattr(obj, field_name, base_dir / value)
