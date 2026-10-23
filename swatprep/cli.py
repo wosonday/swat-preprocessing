@@ -372,16 +372,24 @@ def convert_weather(
 @click.argument("out_path", type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--mask", is_flag=True,
               help="Also set pixels outside the boundary polygons to NoData (default: bbox crop only).")
-def clip(raster: Path, boundary: Path, out_path: Path, mask: bool) -> None:
+@click.option("--crs", "dst_crs", default=None,
+              help="Reproject the output to this CRS (e.g. EPSG:32648). Default: keep the raster CRS.")
+@click.option("--resampling", type=click.Choice(["nearest", "bilinear", "cubic"]), default="nearest",
+              show_default=True, help="Resampling when --crs/--resolution change the grid "
+              "(nearest for class codes, bilinear/cubic for a DEM).")
+@click.option("--resolution", type=click.FloatRange(min=0, min_open=True), default=None,
+              help="Output pixel size in the output CRS units (default: GDAL's choice).")
+def clip(raster: Path, boundary: Path, out_path: Path, mask: bool, dst_crs, resampling, resolution) -> None:
     """Crop RASTER to the extent of BOUNDARY and write the GeoTIFF OUT_PATH.
 
     Reads only the needed window strip by strip, so huge rasters are fine.
-    No resampling or reprojection of the raster is done.
+    With --crs the raster is also reprojected (only the cropped window is computed).
     """
     try:
         from .utils.raster import clip_raster
 
-        clip_raster(raster, out_path, boundary, mask=mask)
+        clip_raster(raster, out_path, boundary, mask=mask, dst_crs=dst_crs,
+                    resampling=resampling, resolution=resolution)
     except ImportError:
         click.echo("Install swatprep[geo] to clip rasters.", err=True)
         sys.exit(1)

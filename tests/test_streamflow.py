@@ -140,3 +140,48 @@ def test_meta_csv_has_station_info(streamflow_csv, tmp_dir):
     meta = pd.read_csv(out / "streamflow_meta.csv")
     assert "station_id" in meta.columns
     assert "ST001" in meta["station_id"].values
+
+
+# ---------------------------------------------------------------------------
+# format: per_station (file = one station, columns date + discharge)
+# ---------------------------------------------------------------------------
+
+
+def test_per_station_single_file_uses_file_stem_as_station(tmp_path):
+    f = tmp_path / "Q_HT_0006.csv"
+    f.write_text('"date","discharge"\n1958-01-01,3\n1958-01-02,3.88\n1958-01-03,\n', encoding="utf-8")
+    result = StreamflowPreprocessor(_make_cfg(f, format="per_station")).run()
+    assert list(result.daily.columns) == ["Q_HT_0006"]
+    assert result.daily["Q_HT_0006"].iloc[1] == 3.88 and len(result.daily) == 3
+    assert not failures(result.qa)
+
+
+def test_per_station_folder_reads_all_matching_files(tmp_path):
+    for sid, v in (("Q_HT_0001", 1), ("Q_HT_0002", 2)):
+        (tmp_path / f"{sid}.csv").write_text(f"date,discharge\n2000-01-01,{v}\n2000-01-02,{v}\n")
+    (tmp_path / "other.csv").write_text("date,discharge\n2000-01-01,9\n")
+    result = StreamflowPreprocessor(_make_cfg(tmp_path, format="per_station")).run()
+    assert list(result.daily.columns) == ["Q_HT_0001", "Q_HT_0002"]
+
+
+def test_long_format_error_hints_at_per_station(tmp_path):
+    f = tmp_path / "Q_HT_0006.csv"
+    f.write_text("date,discharge\n2000-01-01,1\n", encoding="utf-8")
+    with pytest.raises(InputValidationError, match="format: per_station"):
+        StreamflowPreprocessor(_make_cfg(f)).run()
+
+
+def test_stations_filter_selects_files_and_reports_missing(tmp_path):
+    for sid in ("Q_HT_0001", "Q_HT_0002", "Q_HT_0003"):
+        (tmp_path / f"{sid}.csv").write_text("date,discharge\n2000-01-01,1\n2000-01-02,2\n")
+    cfg = _make_cfg(tmp_path, format="per_station", stations=["Q_HT_0003", "Q_HT_0001"])
+    assert list(StreamflowPreprocessor(cfg).run().daily.columns) == ["Q_HT_0001", "Q_HT_0003"]
+    with pytest.raises(InputValidationError, match="Q_HT_0099"):
+        StreamflowPreprocessor(_make_cfg(tmp_path, format="per_station", stations=["Q_HT_0099"])).run()
+
+
+def test_stations_filter_long_format(streamflow_csv):
+    with pytest.raises(InputValidationError, match="NOPE"):
+        StreamflowPreprocessor(_make_cfg(streamflow_csv, stations=["NOPE"])).run()
+    r = StreamflowPreprocessor(_make_cfg(streamflow_csv, stations=["ST001"])).run()
+    assert list(r.daily.columns) == ["ST001"]

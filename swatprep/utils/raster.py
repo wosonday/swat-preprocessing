@@ -172,15 +172,29 @@ def clip_raster(
     boundary_path: Path,
     mask: bool = False,
     max_pixels: int = 16_000_000,
+    dst_crs=None,
+    resampling: str = "nearest",
+    resolution: float | None = None,
 ) -> Path:
     """Crop a raster to the boundary's bounding box (optionally mask outside the polygons).
 
-    The boundary is reprojected to the raster CRS. Only the needed window is read,
+    The boundary is reprojected to the output CRS. Only the needed window is read,
     strip by strip, so memory stays bounded even for very large rasters.
-    No resampling or reprojection of the raster itself is done.
+
+    dst_crs     target CRS (e.g. "EPSG:32648"); None or equal to the source CRS = keep it.
+                When it differs, the raster is warped lazily (WarpedVRT) and only the
+                cropped window is computed.
+    resampling  "nearest" (class codes) | "bilinear" | "cubic" (continuous data such as a DEM).
+    resolution  output pixel size in dst_crs units; None = GDAL default for the source.
     """
+    from contextlib import nullcontext
+
     import rasterio
+    from rasterio.crs import CRS
+    from rasterio.enums import Resampling
     from rasterio.features import geometry_mask
+    from rasterio.vrt import WarpedVRT
+    from rasterio.warp import calculate_default_transform
     from rasterio.windows import Window
 
     src_path, dst_path = Path(src_path), Path(dst_path)
@@ -189,26 +203,41 @@ def clip_raster(
             raise InputValidationError(f"Raster has no CRS, cannot clip: {src_path}")
         if mask and src.nodata is None:
             raise InputValidationError("mask=True needs a raster with a NoData value")
-        gdf = _read_boundary(boundary_path, src.crs)
-        c0, r0, width, height = _window_of(src, gdf.total_bounds)
-        profile = src.profile.copy()
-        profile.update(
-            driver="GTiff", width=width, height=height, tiled=True,
-            blockxsize=256, blockysize=256, compress="deflate", BIGTIFF="IF_SAFER",
-            transform=src.window_transform(Window(c0, r0, width, height)),
-        )
-        dst_path.parent.mkdir(parents=True, exist_ok=True)
-        step = max(1, max_pixels // width)
-        with rasterio.open(dst_path, "w", **profile) as dst:
-            for row in range(0, height, step):
-                h = min(step, height - row)
-                win = Window(c0, r0 + row, width, h)
-                data = src.read(window=win)
-                if mask:
-                    inside = geometry_mask(
-                        gdf.geometry, out_shape=(h, width),
-                        transform=src.window_transform(win), invert=True,
-                    )
-                    data[:, ~inside] = src.nodata
-                dst.write(data, window=Window(0, row, width, h))
+        try:
+            method = Resampling[resampling]
+        except KeyError:
+            raise InputValidationError(f"Unknown resampling '{resampling}'") from None
+        target = CRS.from_user_input(dst_crs) if dst_crs else src.crs
+
+        if target == src.crs and resolution is None:
+            ds, ctx = src, nullcontext(src)
+        else:
+            tf, w, h = calculate_default_transform(
+                src.crs, target, src.width, src.height, *src.bounds, resolution=resolution)
+            ds = WarpedVRT(src, crs=target, transform=tf, width=w, height=h,
+                           resampling=method, nodata=src.nodata)
+            ctx = ds
+        with ctx:
+            gdf = _read_boundary(boundary_path, target)
+            c0, r0, width, height = _window_of(ds, gdf.total_bounds)
+            profile = src.profile.copy()
+            profile.update(
+                driver="GTiff", width=width, height=height, tiled=True, crs=target,
+                blockxsize=256, blockysize=256, compress="deflate", BIGTIFF="IF_SAFER",
+                transform=ds.window_transform(Window(c0, r0, width, height)),
+            )
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            step = max(1, max_pixels // width)
+            with rasterio.open(dst_path, "w", **profile) as dst:
+                for row in range(0, height, step):
+                    h_ = min(step, height - row)
+                    win = Window(c0, r0 + row, width, h_)
+                    data = ds.read(window=win)
+                    if mask:
+                        inside = geometry_mask(
+                            gdf.geometry, out_shape=(h_, width),
+                            transform=ds.window_transform(win), invert=True,
+                        )
+                        data[:, ~inside] = src.nodata
+                    dst.write(data, window=Window(0, row, width, h_))
     return dst_path

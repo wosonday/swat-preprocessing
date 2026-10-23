@@ -84,6 +84,38 @@ def resolve_fill_inputs(o: dict) -> FillInputs:
     )
 
 
+def fill_for_build(weather: WeatherConfig, qa: list) -> WeatherConfig:
+    """`build` with weather.fill.run_in_build: fill the gaps, write the filled CSVs to
+    weather.fill.output_dir and return a WeatherConfig that reads them (QA appended to `qa`)."""
+    from .core.weather_fill import WeatherGapFiller
+    from .qa import QACheck
+    from .writers.weather_fill import WeatherFillWriter
+
+    fill_cfg = weather.fill
+    out = fill_cfg.output_dir
+    if out is None:
+        raise ConfigError("weather.fill.run_in_build needs weather.fill.output_dir")
+    if weather.precip is not None or weather.temp is not None:
+        raise ConfigError("weather.fill.run_in_build needs one station network "
+                          "(weather.stations + weather.data_dir), not weather.precip / weather.temp")
+    if weather.data_dir is not None and Path(out).resolve() == Path(weather.data_dir).resolve():
+        raise ConfigError("weather.fill.output_dir must differ from weather.data_dir "
+                          "(the observed files would be overwritten)")
+    real = weather.model_copy(update={"fill": None, "missing_policy": "warn"})
+    result = WeatherGapFiller(real, _build_source(fill_cfg, real), fill_cfg.min_overlap_days).run()
+    qa.extend(result.qa)
+    written = WeatherFillWriter(result, out).write()
+    qa.append(QACheck(
+        name="weather_fill_in_build", status="pass",
+        message=f"gaps filled before building: {len(written)} file(s) written to {out}; "
+                "the weather output below is built from them",
+    ))
+    return weather.model_copy(update={
+        "stations": Path(out) / "stations.csv", "data_dir": Path(out),
+        "file_pattern": "{id}.csv", "fill": None,
+    })
+
+
 def _build_source(fill_cfg: WeatherFillConfig, real_cfg: WeatherConfig) -> FillSource:
     if fill_cfg.type == "netcdf":
         return NetCDFFillSource(fill_cfg.netcdf)

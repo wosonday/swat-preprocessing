@@ -1,0 +1,111 @@
+# swatprep - cấu hình ĐẦY ĐỦ, mọi tuỳ chọn đều có chú thích.
+# Sao chép file này, giữ lại các mục cần dùng và xoá phần còn lại.
+#
+#   swatprep validate config.yaml          # kiểm tra YAML + file đầu vào
+#   swatprep build    config.yaml          # chạy toàn bộ các mục đã khai báo
+#   swatprep build    config.yaml --only soil
+#
+# Quy ước: giá trị sau dấu "=" trong chú thích là MẶC ĐỊNH; "(bắt buộc)" nghĩa là không có mặc định.
+# Đường dẫn tương đối được tính từ thư mục chứa file YAML này, không phải thư mục đang chạy lệnh.
+
+project:
+  name: "Chu_basin"                 # (bắt buộc) tên dự án, ghi vào manifest.json
+  crs: "EPSG:32648"                 # (bắt buộc) CRS đích của MỌI raster đã cắt, vd UTM 48N
+  boundary: "./data/boundary.geojson"  # .shp | .gpkg | .geojson; có thì build tự cắt dem/landuse/soil
+  output_dir: "./output"            # = ./output
+  targets: ["swatplus"]             # "swatplus" | "swat" | cả hai; quyết định định dạng weather
+
+# --- (tuỳ chọn) cắt rảnh tay từng raster theo danh sách; thường KHÔNG cần vì dem/landuse/soil
+#     đã tự cắt. Cần project.boundary. Chạy riêng: swatprep build config.yaml --only clip
+# clip:
+#   - src: ./data/raw/other.tif
+#     dst: ./data/spatial/other_clip.tif
+#     mask: false                   # = false; true: ô ngoài đa giác -> NoData
+#     resampling: nearest           # = nearest | bilinear | cubic
+#     resolution: 30                # = để GDAL chọn; đơn vị của project.crs
+
+dem:
+  path: "./data/dem_30m.tif"        # (bắt buộc) raster gốc (GeoTIFF, hdr.adf, ...)
+  output_name: "dem_projected.tif"  # = dem_projected.tif; ghi vào <output_dir>/spatial/
+  clip: true                        # = true; false: không cắt, quét cả raster
+  resampling: bilinear              # = bilinear | nearest | cubic (khi phải chiếu lại về project.crs)
+  # resolution: 30                  # = để GDAL chọn; kích thước ô theo đơn vị của project.crs
+
+landuse:
+  raster: "./data/landuse_2020.tif" # (bắt buộc)
+  lookup: "./data/landuse_lookup.csv"  # (bắt buộc) bảng mã raster -> mã SWAT
+  source_code_col: "code"           # = code       cột chứa mã trong raster
+  swat_code_col: "swat_code"        # = swat_code  cột mã SWAT (FRST, AGRL, ...)
+  swat_name_col: "swat_name"        # = swat_name  cột tên lớp
+  output_name: "landuse_clip.tif"   # = landuse_clip.tif; ghi vào <output_dir>/landuse/
+  clip: true                        # = true; chỉ giữ các lớp có trong lưu vực
+  output_lookup: true               # = true; ghi landuse/landuse_vlookup.csv (LANDUSE_ID, SWAT_CODE) cho QSWAT
+  # resolution: 10                  # = để GDAL chọn (luôn lấy mẫu nearest để giữ mã lớp)
+
+soil:
+  raster: "./data/soil_map.tif"     # (bắt buộc)
+  table: "./data/usersoil.csv"      # (bắt buộc) bảng thông số đất (CSV hoặc SQLite)
+  soil_key_col: "soil_id"           # = soil_id    cột khoá khớp với mã raster
+  output_usersoil: true             # = true; ghi usersoil.csv
+  usersoil_format: swat             # = swat | raw. swat: 152 cột đúng mẫu SWAT+ Editor (bỏ cột khoá, gộp hàng trùng,
+                                    #   SNAM duy nhất); raw: ghi nguyên bảng đầu vào
+  output_name: "soil_clip.tif"      # = soil_clip.tif; ghi vào <output_dir>/soil/
+  clip: true                        # = true; chỉ giữ các loại đất có trong lưu vực
+  output_lookup: true               # = true; ghi soil/soil_vlookup.csv (SOIL_ID, SNAM); cần cột SNAM trong bảng
+  # resolution: 30                  # = để GDAL chọn (luôn lấy mẫu nearest)
+
+weather:
+  stations: "./data/weather_stations.csv"  # CSV: id, name, lat, lon, elev
+  data_dir: "./data/weather"        # mỗi trạm một CSV: date, precip, tmax, tmin, ...
+  file_pattern: "{id}.csv"          # = {id}.csv; dùng "{name}.csv" nếu đặt tên file theo tên trạm
+  format: "csv"                     # = csv (hiện chỉ hỗ trợ csv)
+  variables: ["precip", "tmax", "tmin"]  # = [precip, tmax, tmin]; thêm wind, solar, humidity nếu có
+  start: "2000-01-01"               # (bắt buộc) ISO YYYY-MM-DD
+  end: "2020-12-31"                 # (bắt buộc) >= start
+  units:
+    precip: "mm"                    # = mm
+    temperature: "degC"             # = degC
+  missing_policy: "fail"            # = fail | warn. CHỈ tác động build: fail = không ghi weather nếu còn ngày thiếu;
+                                    # warn = vẫn ghi, ngày thiếu thành -99. KHÔNG tự điền (dùng `fill` bên dưới).
+                                    # "Thiếu" = ô trống hoặc ngày vắng hàng trong CSV (-99 KHÔNG được nhận là thiếu)
+
+  # --- (tuỳ chọn) mưa và nhiệt độ từ hai mạng lưới trạm khác nhau; ghi đè stations/data_dir ở trên
+  # precip:
+  #   stations: "./data/pcp_stations.csv"
+  #   data_dir: "./data/pcp"
+  #   file_pattern: "{id}.csv"
+  # temp:
+  #   stations: "./data/tmp_stations.csv"
+  #   data_dir: "./data/tmp"
+
+  # --- (tuỳ chọn) điền ngày thiếu. Hai cách dùng:
+  #   A) chạy `swatprep fill weather --config config.yaml` (build bỏ qua khối này), rồi trỏ stations/data_dir
+  #      vào output_dir ở bước build.
+  #   B) đặt run_in_build: true để MỘT lệnh `swatprep build` tự điền, xuất CSV đã điền vào output_dir rồi dựng
+  #      weather từ đó. Khi đó stations/data_dir ở trên là dữ liệu THỰC ĐO, và output_dir phải KHÁC data_dir.
+  fill:
+    run_in_build: false             # = false
+    type: "netcdf"                  # = csv | netcdf
+    output_dir: "./data/filled"
+    min_overlap_days: 365           # = 10; ít ngày trùng hơn mức này thì CẢNH BÁO low_confidence (vẫn điền)
+    netcdf:
+      path: "./data/grid_1980_2014.nc"   # lưới NGÀY, mưa mm, nhiệt độ degC
+      var_map: { precip: pr, tmax: tasmax, tmin: tasmin }   # tên biến swatprep -> tên biến trong .nc
+      lat_name: "auto"              # = auto
+      lon_name: "auto"              # = auto
+      time_name: "auto"             # = auto
+      search_radius: 1              # = 1 (0-5); ô gần nhất không có dữ liệu thì tìm trong bán kính này
+    # csv:                          # dùng khi type: csv
+    #   stations: "./data/fill_stations.csv"
+    #   data_dir: "./data/fill_data"
+    #   file_pattern: "{id}.csv"
+
+streamflow:
+  path: "./data/streamflow.csv"     # (bắt buộc) CSV dạng dài, hoặc file/thư mục theo trạm khi format: per_station
+  format: long                      # = long | per_station. per_station: mỗi file một trạm (date,discharge), mã trạm = tên file
+  # glob: "Q_*.csv"                 # = Q_*.csv; per_station + path là thư mục
+  # stations: [Q_HT_0006, Q_HT_0007]  # = tất cả; chỉ giữ các trạm này (mã trạm / tên file không đuôi)
+  date_col: "date"                  # = date
+  station_id_col: "station_id"      # = station_id
+  value_col: "flow"                 # = flow
+  units: "m3s"                      # = m3s | mm

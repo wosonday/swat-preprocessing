@@ -30,6 +30,10 @@ Each of pcp/tmp/slr/hmd/wnd is the written data file's stem (no extension)
 if that variable was written for the station, else "sim". pet/atmo_dep are
 not computed by swatprep and are always "null".
 
+``swatplus_wgn_stations.csv`` + ``swatplus_wgn_monthly.csv`` (two-file) and
+``swatplus_wgn_onefile.csv`` (one-file) -- the CSV formats of SWAT+ Editor > Weather generator >
+Import. (``wgn.csv`` is a swatprep-internal summary and is NOT an Editor import file.)
+
 ``weather-wgn.cli`` -- one WGN group per station (group name == station
 name), each a 3-line header (title, group header, column header) followed
 by 12 monthly rows, built directly from ``WeatherResult.wgn_stats``.
@@ -176,6 +180,7 @@ class SWATPlusWeatherWriter:
             wgn_names = self._assign_wgn_names(stations, sids)
             written.append(_write_weather_wgn(out, self.result.wgn_stats, stations, wgn_names, global_nbyr, ts))
             written.append(_write_weather_sta(out, station_files, wgn_names, ts))
+            written.extend(_write_wgn_editor_csv(out, self.result.wgn_stats, stations, wgn_names, global_nbyr))
 
         # WGN statistics and station list (existing reference outputs, kept
         # alongside weather-wgn.cli for csv-friendly inspection)
@@ -270,6 +275,44 @@ def _write_two_col(
             for y, d, tx, tn in zip(year_arr, doy_arr, primary, secondary)
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_wgn_editor_csv(
+    out: Path, wgn_stats: pd.DataFrame, stations: pd.DataFrame, wgn_names: dict, nbyr: int,
+) -> list[Path]:
+    """CSV files for SWAT+ Editor > Weather generator > Import (two-file and one-file formats).
+
+    Column order follows the Editor's import templates (SWAT+ Editor documentation, "Weather
+    Generator"); the one-file format is read by POSITION: 5 station fields, then 14 variables
+    per month, month by month (173 columns).
+    """
+    var_names = [h for _, h in _WGN_COLUMN_MAP]
+    stations_rows, monthly_rows, onefile_rows = [], [], []
+    for i, (sid, name) in enumerate(wgn_names.items(), start=1):
+        _, lat, lon, elev = SWATPlusWeatherWriter._station_meta(stations, sid)
+        stations_rows.append({"id": i, "name": name, "lat": lat, "lon": lon, "elev": elev,
+                              "rain_yrs": nbyr})
+        rows = wgn_stats[wgn_stats["station_id"] == sid].sort_values("month")
+        one = {"name": name, "lat": lat, "lon": lon, "elev": elev, "rain_yrs": nbyr}
+        for _, r in rows.iterrows():
+            m = int(r["month"])
+            vals = {h: float(r[src]) for src, h in _WGN_COLUMN_MAP}
+            monthly_rows.append({"id": len(monthly_rows) + 1, "wgn_id": i, "month": m, **vals})
+            one.update({f"{h}{m}": v for h, v in vals.items()})
+        onefile_rows.append(one)
+    mon_cols = ["id", "wgn_id", "month", *var_names]
+    one_cols = ["name", "lat", "lon", "elev", "rain_yrs",
+                *[f"{h}{m}" for m in range(1, 13) for h in var_names]]
+    paths = []
+    for fname, rows, cols in (
+        ("swatplus_wgn_stations.csv", stations_rows, ["id", "name", "lat", "lon", "elev", "rain_yrs"]),
+        ("swatplus_wgn_monthly.csv", monthly_rows, mon_cols),
+        ("swatplus_wgn_onefile.csv", onefile_rows, one_cols),
+    ):
+        path = out / fname
+        pd.DataFrame(rows, columns=cols).to_csv(path, index=False)
+        paths.append(path)
+    return paths
 
 
 def _write_weather_wgn(

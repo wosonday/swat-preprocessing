@@ -63,7 +63,7 @@ def test_build_writes_clipped_rasters_and_basin_tables_into_output_dir(project):
     with rasterio.open(out / "spatial" / "dem_projected.tif") as ds:
         assert (ds.width, ds.height) == (4, 4)
     assert pd.read_csv(out / "landuse" / "landuse_lookup.csv")["code"].tolist() == [5]
-    assert pd.read_csv(out / "soil" / "usersoil.csv")["soil_id"].tolist() == [7]
+    assert pd.read_csv(out / "soil" / "usersoil.csv")["SNAM"].tolist() == [7]
     assert pd.read_csv(out / "landuse" / "landuse_raster_codes.csv")["raster_code"].tolist() == [5]
 
 
@@ -73,7 +73,7 @@ def test_clip_false_keeps_old_behaviour(project):
 
     assert not list(out.rglob("*.tif"))
     assert pd.read_csv(out / "landuse" / "landuse_lookup.csv")["code"].tolist() == [1, 5, 9]
-    assert pd.read_csv(out / "soil" / "usersoil.csv")["soil_id"].tolist() == [4, 7, 8]
+    assert pd.read_csv(out / "soil" / "usersoil.csv")["SNAM"].tolist() == [4, 7, 8]
     assert not any("boundary_window" in c.name for c in result.qa_checks)
 
 

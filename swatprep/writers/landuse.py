@@ -28,6 +28,12 @@ class LandUseWriter:
         self.result.lookup.to_csv(lookup_path, index=False)
         written.append(lookup_path)
 
+        # VLOOKUP table: raster value -> SWAT code (QSWAT / QSWAT+ landuse lookup)
+        if self.result.vlookup is not None:
+            vl_path = out / "landuse_vlookup.csv"
+            self.result.vlookup.to_csv(vl_path, index=False)
+            written.append(vl_path)
+
         # Raster codes summary (if available)
         if self.result.raster_codes is not None:
             codes_path = out / "landuse_raster_codes.csv"

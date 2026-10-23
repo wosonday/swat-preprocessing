@@ -1,8 +1,7 @@
 """SoilWriter: write validated usersoil.csv and soil raster codes to the output package.
 
-The preprocessor does not reformat the soil table — it validates and packages
-the input CSV as-is so that it can be imported into SWAT+ via the ArcSWAT /
-SWAT+ Editor soil database import workflow.
+By default (soil.usersoil_format: swat) usersoil.csv uses the 152-column SWAT+ layout of
+the SWAT+ Editor example file; with "raw" the input table is written unchanged.
 
 Reference: Neitsch, S.L. et al. (2011). SWAT Input/Output File Documentation,
 Version 2009. Texas Water Resources Institute Technical Report 365.
@@ -30,8 +29,15 @@ class SoilWriter:
 
         # Validated soil table → usersoil.csv (SWAT convention)
         usersoil_path = out / "usersoil.csv"
-        self.result.soil_table.to_csv(usersoil_path, index=False)
+        table = self.result.usersoil if self.result.usersoil is not None else self.result.soil_table
+        table.to_csv(usersoil_path, index=False, float_format="%.10g")
         written.append(usersoil_path)
+
+        # VLOOKUP table: raster value -> soil name (QSWAT / QSWAT+ soil lookup)
+        if self.result.vlookup is not None:
+            vl_path = out / "soil_vlookup.csv"
+            self.result.vlookup.to_csv(vl_path, index=False)
+            written.append(vl_path)
 
         # Raster codes summary (if available)
         if self.result.raster_codes is not None:

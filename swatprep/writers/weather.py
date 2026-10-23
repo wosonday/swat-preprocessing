@@ -20,6 +20,8 @@ produce.
 Master (metadata) file (`master_pcp.txt` / `master_tmp.txt`):
     ID,NAME,LAT,LONG,ELEVATION      (uppercase columns; NAME carries the
                                       domain prefix, e.g. "pcp_ANKHE")
+    ID is the serial number (STT) of the station in the file: 1, 2, 3, ... in the
+    order of the stations table, numbered separately in master_pcp and master_tmp.
 """
 
 from __future__ import annotations
@@ -91,7 +93,7 @@ class WeatherWriter:
     def _write_master(out: Path, stations: pd.DataFrame, prefix: str, filename: str) -> Path:
         df = stations.reset_index()
         master = pd.DataFrame({
-            "ID": df["id"],
+            "ID": range(1, len(df) + 1),  # STT: serial number 1..N, not the source station id
             "NAME": prefix + df["name"].astype(str),
             "LAT": df["lat"],
             "LONG": df["lon"],

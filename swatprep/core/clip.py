@@ -23,9 +23,10 @@ class ClipResult:
 class ClipProcessor:
     """Crop each `clip` item (src -> dst) to the project boundary's bounding box."""
 
-    def __init__(self, items: list[ClipItemConfig], boundary: Path) -> None:
+    def __init__(self, items: list[ClipItemConfig], boundary: Path, dst_crs: str | None = None) -> None:
         self.items = items
         self.boundary = boundary
+        self.dst_crs = dst_crs  # project.crs: every written raster is reprojected to it
 
     def run(self) -> ClipResult:
         res = ClipResult()
@@ -54,7 +55,8 @@ class ClipProcessor:
     def _clip(self, item: ClipItemConfig, res: ClipResult) -> None:
         name = item.dst.name
         try:
-            clip_raster(item.src, item.dst, self.boundary, mask=item.mask)
+            clip_raster(item.src, item.dst, self.boundary, mask=item.mask, dst_crs=self.dst_crs,
+                        resampling=item.resampling, resolution=item.resolution)
         except ImportError:
             res.qa.append(QACheck(
                 name=f"clip_failed:{name}", status="fail",
@@ -70,12 +72,15 @@ class ClipProcessor:
             res.written.append(item.dst)
             res.qa.append(QACheck(
                 name=f"clip_written:{name}", status="pass",
-                message=f"{item.src.name} clipped to the boundary -> {item.dst}",
+                message=f"{item.src.name} clipped to the boundary"
+                        + (f" and in {self.dst_crs}" if self.dst_crs else "") + f" -> {item.dst}",
+                context={"dst_crs": self.dst_crs, "resampling": item.resampling,
+                         "resolution": item.resolution},
             ))
 
     def _is_fresh(self, item: ClipItemConfig) -> bool:
         """True when dst exists and is newer than the source and all boundary files."""
-        if not item.dst.exists():
+        if not item.dst.exists() or not self._crs_ok(item):
             return False
         b = self.boundary
         sidecars = [p for p in b.parent.glob(b.stem + ".*") if p.is_file()] or [b]
@@ -83,7 +88,24 @@ class ClipProcessor:
         return item.dst.stat().st_mtime >= newest
 
 
-def clip_into_output(src, name, out_dir, boundary, enabled, qa) -> Path | None:
+    def _crs_ok(self, item: ClipItemConfig) -> bool:
+        """True when dst is in the target CRS and at the requested resolution (else re-clip)."""
+        if not self.dst_crs and item.resolution is None:
+            return True
+        try:
+            import rasterio
+            from rasterio.crs import CRS
+
+            with rasterio.open(item.dst) as d:
+                if self.dst_crs and d.crs != CRS.from_user_input(self.dst_crs):
+                    return False
+                return item.resolution is None or abs(abs(d.res[0]) - item.resolution) < 1e-9
+        except Exception:
+            return False
+
+
+def clip_into_output(src, name, out_dir, boundary, enabled, qa, dst_crs=None,
+                     resampling="nearest", resolution=None) -> Path | None:
     """Domain-level clip: write `out_dir/name` cropped to `boundary`, appending QA to `qa`.
 
     Returns the boundary to use for window-limited reads, or None when clipping is
@@ -92,7 +114,8 @@ def clip_into_output(src, name, out_dir, boundary, enabled, qa) -> Path | None:
     """
     if not enabled or boundary is None or not Path(src).exists():
         return None
-    qa.extend(ClipProcessor([ClipItemConfig(src=src, dst=out_dir / name)], boundary).run().qa)
+    item = ClipItemConfig(src=src, dst=out_dir / name, resampling=resampling, resolution=resolution)
+    qa.extend(ClipProcessor([item], boundary, dst_crs).run().qa)
     return boundary
 
 

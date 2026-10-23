@@ -212,6 +212,11 @@ ID,NAME,LAT,LONG,ELEVATION
 2,pcp_StationB,15.8,105.6,95.0
 ```
 
+`ID` is the **serial number (STT)** of the station in that file: 1, 2, 3, ... in the order of the stations
+table. It is **not** the source station `id` (e.g. `ST009`). `master_pcp.txt` and `master_tmp.txt` are numbered
+separately, so with split precipitation / temperature networks each file counts from 1. Only stations whose
+data file was written get a row, so there are no gaps in the numbering.
+
 ---
 
 ## Variable → file mapping

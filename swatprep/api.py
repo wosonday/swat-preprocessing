@@ -76,7 +76,7 @@ class SWATPrepProject:
         if "clip" in domains_to_run and cfg.clip is not None:
             from .core.clip import ClipProcessor
 
-            result = ClipProcessor(cfg.clip, cfg.project.boundary).run()
+            result = ClipProcessor(cfg.clip, cfg.project.boundary, cfg.project.crs).run()
             all_qa.extend(result.qa)
             domains_run.append("clip")
 
@@ -89,7 +89,8 @@ class SWATPrepProject:
             from .writers.spatial import SpatialWriter
 
             boundary = clip_into_output(cfg.dem.path, cfg.dem.output_name, output_dir / "spatial",
-                                        cfg.project.boundary, cfg.dem.clip, all_qa)
+                                        cfg.project.boundary, cfg.dem.clip, all_qa,
+                                        cfg.project.crs, cfg.dem.resampling, cfg.dem.resolution)
             result = DEMPreprocessor(cfg.dem, project_crs=cfg.project.crs, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("dem")
@@ -113,7 +114,8 @@ class SWATPrepProject:
 
             lu = cfg.landuse
             boundary = clip_into_output(lu.raster, lu.output_name, output_dir / "landuse",
-                                        cfg.project.boundary, lu.clip, all_qa)
+                                        cfg.project.boundary, lu.clip, all_qa,
+                                        cfg.project.crs, "nearest", lu.resolution)
             result = LandUsePreprocessor(lu, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("landuse")
@@ -136,7 +138,8 @@ class SWATPrepProject:
 
             so = cfg.soil
             boundary = clip_into_output(so.raster, so.output_name, output_dir / "soil",
-                                        cfg.project.boundary, so.clip, all_qa)
+                                        cfg.project.boundary, so.clip, all_qa,
+                                        cfg.project.crs, "nearest", so.resolution)
             result = SoilPreprocessor(so, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("soil")
@@ -156,7 +159,12 @@ class SWATPrepProject:
         if "weather" in domains_to_run and cfg.weather is not None:
             from .core.weather import WeatherPreprocessor
 
-            result = WeatherPreprocessor(cfg.weather).run()
+            weather_cfg = cfg.weather
+            if weather_cfg.fill is not None and weather_cfg.fill.run_in_build:
+                from .fill_setup import fill_for_build
+
+                weather_cfg = fill_for_build(weather_cfg, all_qa)
+            result = WeatherPreprocessor(weather_cfg).run()
             all_qa.extend(result.qa)
             domains_run.append("weather")
 
@@ -264,6 +272,9 @@ class SWATPrepProject:
             if cfg.weather.temp is not None:
                 _check_path(cfg.weather.temp.stations, "weather.temp.stations", checks)
                 _check_path(cfg.weather.temp.data_dir, "weather.temp.data_dir", checks)
+            fill = cfg.weather.fill
+            if fill is not None and fill.run_in_build and fill.netcdf is not None and fill.type == "netcdf":
+                _check_path(fill.netcdf.path, "weather.fill.netcdf.path", checks)
         if cfg.streamflow:
             _check_path(cfg.streamflow.path, "streamflow.path", checks)
 

@@ -34,6 +34,7 @@ class LandUseResult:
     code_mapping: dict[int, int]
     unmatched_codes: set
     qa: list[QACheck] = field(default_factory=list)
+    vlookup: pd.DataFrame | None = None  # LANDUSE_ID, SWAT_CODE (QSWAT / QSWAT+ lookup table)
 
 
 class LandUsePreprocessor:
@@ -59,7 +60,21 @@ class LandUsePreprocessor:
             code_mapping=mapping,
             unmatched_codes=unmatched,
             qa=qa,
+            vlookup=self._vlookup(lookup, qa) if self.cfg.output_lookup else None,
         )
+
+    def _vlookup(self, lookup: pd.DataFrame, qa: list[QACheck]) -> pd.DataFrame:
+        """Two-column table raster value -> SWAT land-use code (one row per value, sorted)."""
+        cfg = self.cfg
+        df = lookup[[cfg.source_code_col, cfg.swat_code_col]].dropna()
+        df.columns = ["LANDUSE_ID", "SWAT_CODE"]
+        df = df.drop_duplicates("LANDUSE_ID").astype({"LANDUSE_ID": int})
+        df = df.sort_values("LANDUSE_ID").reset_index(drop=True)
+        qa.append(QACheck(
+            name="landuse_vlookup", status="pass",
+            message=f"land-use VLOOKUP table: {len(df)} row(s) (LANDUSE_ID -> SWAT_CODE)",
+        ))
+        return df
 
     def _load_lookup(self, qa: list[QACheck]) -> pd.DataFrame:
         cfg = self.cfg

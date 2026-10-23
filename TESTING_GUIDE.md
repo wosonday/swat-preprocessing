@@ -33,7 +33,7 @@ python -m pytest -v
 
 **Kết quả mong đợi:**
 ```
-198 passed in ~5s   (đã cài .[geo], xarray, netCDF4)
+246 passed in ~5s   (đã cài .[geo], xarray, netCDF4)
 ```
 
 Nếu chưa cài `rasterio`/`geopandas` (`pip install -e ".[geo]"`), các test raster và `clip` sẽ bị skip.

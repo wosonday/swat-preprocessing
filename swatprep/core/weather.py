@@ -36,6 +36,18 @@ class WeatherResult:
     qa: list[QACheck] = field(default_factory=list)
 
 
+def _no_files_message(data_dir, file_pattern: str, stations: pd.DataFrame, label: str) -> str:
+    """Explain WHICH files were looked for, since a wrong id / file_pattern is the usual cause."""
+    first = stations.index[0]
+    tried = file_pattern.format(id=first, name=stations.loc[first, "name"])
+    by_name = file_pattern.replace("{id}", "{name}")
+    hint = (f' If the files are named after the station name (e.g. "{stations.loc[first, "name"]}.csv"), '
+            f'set weather.file_pattern: "{by_name}".') if "{id}" in file_pattern else ""
+    return (f"No valid station data files found for {label}. For station id '{first}' swatprep looked for "
+            f"'{tried}' in {data_dir} (file_pattern '{file_pattern}', {len(stations)} station(s) in the "
+            f"stations table).{hint} Check weather.data_dir, the stations table and file_pattern.")
+
+
 def compute_wgn_stats(
     stations: pd.DataFrame,
     daily: dict[str, pd.DataFrame],
@@ -248,10 +260,8 @@ class WeatherPreprocessor:
             per_station[sid] = {var: df[var] for var in variables}
 
         if not per_station:
-            raise InputValidationError(
-                f"No valid station data files found for {label or 'weather'}. "
-                f"Check data_dir and station IDs."
-            )
+            raise InputValidationError(_no_files_message(
+                data_dir, file_pattern, stations, label or "weather"))
 
         result: dict[str, pd.DataFrame] = {}
         for var in variables:
@@ -323,9 +333,8 @@ class WeatherPreprocessor:
             per_station[sid] = {var: df[var] for var in cfg.variables}
 
         if not per_station:
-            raise InputValidationError(
-                "No valid station data files found. Check weather.data_dir and station IDs."
-            )
+            raise InputValidationError(_no_files_message(
+                cfg.data_dir, cfg.file_pattern, stations, "weather"))
 
         # Pivot to wide format per variable
         daily: dict[str, pd.DataFrame] = {}

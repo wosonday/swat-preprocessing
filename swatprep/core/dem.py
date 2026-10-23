@@ -116,6 +116,16 @@ class DEMPreprocessor:
                     status="warn",
                     message="DEM has no CRS defined -- reproject before use in SWAT.",
                 ))
+            elif self.project_crs and crs_str != self.project_crs and self.boundary is not None:
+                qa.append(QACheck(
+                    name="dem_crs_reprojected",
+                    status="pass",
+                    message=(
+                        "DEM CRS (" + crs_str + ") differs from project CRS (" + str(self.project_crs)
+                        + "); the clipped DEM in the output folder is reprojected to the project CRS."
+                    ),
+                    context={"dem_crs": crs_str, "project_crs": self.project_crs},
+                ))
             elif self.project_crs and crs_str != self.project_crs:
                 qa.append(QACheck(
                     name="dem_crs_mismatch",

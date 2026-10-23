@@ -36,6 +36,8 @@ class DEMConfig(BaseModel):
     path: Path
     output_name: str = "dem_projected.tif"  # clipped DEM written to <output_dir>/spatial/
     clip: bool = True  # crop to project.boundary (needs boundary); False = whole raster
+    resampling: Literal["nearest", "bilinear", "cubic"] = "bilinear"  # when reprojected to project.crs
+    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
 
 
 class ClipItemConfig(BaseModel):
@@ -43,6 +45,8 @@ class ClipItemConfig(BaseModel):
     src: Path
     dst: Path
     mask: bool = False  # also set pixels outside the polygons to NoData
+    resampling: Literal["nearest", "bilinear", "cubic"] = "nearest"  # when reprojected to project.crs
+    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
 
 
 class LandUseConfig(BaseModel):
@@ -53,6 +57,8 @@ class LandUseConfig(BaseModel):
     swat_name_col: str = "swat_name"
     output_name: str = "landuse_clip.tif"  # written to <output_dir>/landuse/
     clip: bool = True  # crop to project.boundary and keep only the basin's classes
+    output_lookup: bool = True  # write landuse/landuse_vlookup.csv (LANDUSE_ID, SWAT_CODE)
+    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
 
 
 class SoilConfig(BaseModel):
@@ -60,8 +66,12 @@ class SoilConfig(BaseModel):
     table: Path  # CSV or SQLite with physical soil parameters
     soil_key_col: str = "soil_id"
     output_usersoil: bool = True
+    # "swat": usersoil.csv in the 152-column SWAT+ layout (SWAT+ Editor example); "raw": input table as is
+    usersoil_format: Literal["swat", "raw"] = "swat"
     output_name: str = "soil_clip.tif"  # written to <output_dir>/soil/
     clip: bool = True  # crop to project.boundary and keep only the basin's soils
+    output_lookup: bool = True  # write soil/soil_vlookup.csv (SOIL_ID, SNAM)
+    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
 
 
 class WeatherUnitsConfig(BaseModel):
@@ -103,6 +113,7 @@ class WeatherFillConfig(BaseModel):
     type: Literal["csv", "netcdf"] = "csv"
     output_dir: Optional[Path] = None
     min_overlap_days: int = Field(default=10, ge=0)
+    run_in_build: bool = False  # True: `build` fills the gaps first (needs output_dir), then builds from the result
     csv: Optional[FillCSVConfig] = None
     netcdf: Optional[FillNetCDFConfig] = None
 
@@ -171,10 +182,15 @@ class WeatherConfig(BaseModel):
 
 
 class StreamflowConfig(BaseModel):
-    path: Path
+    path: Path  # long CSV, or (format per_station) one station file / a folder of them
+    # long: one file, a row per day and station. per_station: each file is one station
+    # (columns date + one flow column); the station id is the file name without extension.
+    format: Literal["long", "per_station"] = "long"
+    glob: str = "Q_*.csv"  # per_station + folder: which files to read
+    stations: Optional[list[str]] = None  # keep only these station ids (default: all found)
     date_col: str = "date"
     station_id_col: str = "station_id"
-    value_col: str = "flow"
+    value_col: str = "flow"  # per_station: flow column in the files (auto if the file has just one)
     units: Literal["m3s", "mm"] = "m3s"
 
 

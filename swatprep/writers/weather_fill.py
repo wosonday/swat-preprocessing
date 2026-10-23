@@ -25,7 +25,9 @@ class WeatherFillWriter:
         out.mkdir(parents=True, exist_ok=True)
         written: list[Path] = []
 
-        stations = self.result.stations
+        # only stations that have data: a station without a file would make the next build fail
+        have_data = set().union(*(w.columns for w in self.result.daily.values()))
+        stations = self.result.stations[self.result.stations.index.isin(have_data)]
         sta_path = out / "stations.csv"
         stations.reset_index().to_csv(sta_path, index=False)
         written.append(sta_path)

@@ -960,7 +960,7 @@ written = WeatherWriter(weather_result, output_dir / "weather").write()
 |---|---|
 | `pcp_{name}.txt` | SWAT Classic precipitation file |
 | `tmp_{name}.txt` | SWAT Classic temperature file |
-| `master_pcp.txt` | Metadata trạm precip (chỉ các trạm đã ghi file dữ liệu) — `ID,NAME,LAT,LONG,ELEVATION` |
+| `master_pcp.txt` | Metadata trạm precip (chỉ các trạm đã ghi file dữ liệu) — `ID,NAME,LAT,LONG,ELEVATION`; `ID` là số thứ tự (STT) 1..N theo thứ tự bảng trạm, không phải mã trạm gốc |
 | `master_tmp.txt` | Metadata trạm temperature (chỉ các trạm đã ghi file dữ liệu) |
 | `wgn.csv` | Weather Generator parameters (14 cols × n_stations × 12 tháng) |
 
