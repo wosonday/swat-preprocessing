@@ -31,12 +31,16 @@ dev = [
     "pytest-cov>=4.0",
 ]
 
+app = [
+    "streamlit>=1.40",
+]
+
 [project.scripts]
 swatprep = "swatprep.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["swatprep*"]
+include = ["swatprep*", "app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
