@@ -1,2 +1,17 @@
 services:
-  $END$
+  swatprep:
+    build: .
+    image: swatprep:dev
+    ports:
+      - "127.0.0.1:8501:8501"
+    environment:
+      SWATPREP_DATA_ROOT: /data
+      SWATPREP_WORKSPACE: /workspace
+    volumes:
+      - type: bind
+        source: ${SWATPREP_HOST_DATA:-./data}
+        target: /data
+        read_only: true
+      - type: bind
+        source: ${SWATPREP_HOST_WORKSPACE:-./workspace}
+        target: /workspace
