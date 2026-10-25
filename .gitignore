@@ -31,6 +31,8 @@ env/
 .agents/
 .codex/
 .*/
+!.github/
+!.streamlit/
 # Example outputs
 examples/output/
 
