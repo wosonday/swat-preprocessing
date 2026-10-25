@@ -1,0 +1,14 @@
+.git/
+.venv/
+.idea/
+.agents/
+.claude/
+.codex/
+.pytest_cache/
+**/__pycache__/
+*.egg-info/
+dist/
+output/
+workspace/
+data/
+.env
