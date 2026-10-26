@@ -37,3 +37,8 @@ env/
 examples/output/
 
 .env
+./data
+./workspace
+# Local data and outputs (mounted into Docker)
+data/
+workspace/
