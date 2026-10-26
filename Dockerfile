@@ -19,13 +19,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------- Stage 2: runtime ----------
 FROM python:3.12-slim-bookworm
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libexpat1 \
- && rm -rf /var/lib/apt/lists/* \
- && useradd --create-home --uid 1000 swat
+    && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 swat
 WORKDIR /app
 COPY --from=builder --chown=swat:swat /app/.venv /app/.venv
 COPY --chown=swat:swat app ./app
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 \
+    SWATPREP_DATA_ROOT=/data SWATPREP_WORKSPACE=/workspace
 USER swat
 EXPOSE 8501
 HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"
