@@ -32,6 +32,7 @@ dev = [
 ]
 
 app = [
+    "ruamel-yaml>=0.18",
     "streamlit>=1.40",
 ]
 
