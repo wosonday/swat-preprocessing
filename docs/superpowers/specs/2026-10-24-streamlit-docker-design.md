@@ -91,10 +91,19 @@ Giai đoạn 2: lõi hỗ trợ `${VAR}` trong đường dẫn config (`os.path.
 
 ## 7. Tiêu chí hoàn thành Giai đoạn 1
 
-- [ ] `uv run pytest` qua toàn bộ test cũ và mới trên Windows.
-- [ ] `uv run streamlit run app/Home.py` hiển thị báo cáo môi trường.
-- [ ] `docker compose up --build` → `http://localhost:8501` hiển thị cùng báo cáo, các driver `GTiff`, `AIG`, `ESRI Shapefile`, `GPKG` đều ✅, `/data` đọc được, `/workspace` ghi được.
-- [ ] Container chạy bằng user không phải root; `docker ps` báo `healthy`.
+- [x] `uv run python -m pytest` qua toàn bộ test cũ và mới (260 passed, Windows và Linux CI).
+- [x] `uv run streamlit run app/Home.py` hiển thị báo cáo môi trường.
+- [x] `docker compose up --build` → `http://localhost:8501`; driver `GTiff`, `AIG`, `ESRI Shapefile`, `GPKG` đều ✅, `/data` chỉ đọc, `/workspace` ghi được.
+- [x] Container chạy bằng user `swat` (không phải root).
+- [ ] `docker ps` báo `healthy` (chưa xác nhận sau 30 giây).
+
+## 8. Giai đoạn 5 (đã làm sớm): CI và phân phối
+
+- [x] `.github/workflows/ci.yml`: job `test` (uv + pytest trên ubuntu) → job `image` (chỉ khi push `main`/tag `v*`) → `ghcr.io/wosonday/swatprep`.
+- [x] `docker pull ghcr.io/wosonday/swatprep:latest` + `swatprep --version` → 0.2.2 (2026-10-25).
+- [ ] Tag `v0.2.2` → image `:0.2.2`.
+- [ ] Branch protection cho `main` (bắt buộc check `test`).
+- [ ] Hướng dẫn chạy cho người dùng (không cần mã nguồn).
 
 ## Tham khảo
 
@@ -104,3 +113,20 @@ Giai đoạn 2: lõi hỗ trợ `${VAR}` trong đường dẫn config (`os.path.
 - Streamlit – Deploy using Docker: https://docs.streamlit.io/deploy/tutorials/docker
 - The Twelve-Factor App – Config: https://12factor.net/config
 - Freeman, S. & Pryce, N. (2009). *Growing Object-Oriented Software, Guided by Tests*. Addison-Wesley.
+
+## 9. Trạng thái và việc tiếp theo (cập nhật 2026-10-26)
+
+**Đã kiểm chứng trên máy Linux thứ hai:** `uv sync --locked` (uv 0.13.5) → 260 passed; `id -u` = 1000 (khớp user `swat` trong container).
+
+**Việc tiếp theo, theo thứ tự:**
+
+1. Merge PR `chore/ignore-local-data` (thêm `data/`, `workspace/` vào `.gitignore`) sau khi job `test` ✅.
+2. PR nhỏ:
+   - `Dockerfile` runtime: `ENV ... SWATPREP_DATA_ROOT=/data SWATPREP_WORKSPACE=/workspace` (bỏ được `-e` khi `docker run`).
+   - Compose: `"127.0.0.1:${SWATPREP_PORT:-8501}:8501"`; thêm `SWATPREP_PORT=8501` vào `.env.example`.
+   - Đổi 5 comment tiếng Việt còn lại sang tiếng Anh (`app/services/settings.py:1`, `app/services/environment.py:69,80`, `Dockerfile:7,12`).
+3. Tag `v0.2.2` → image `ghcr.io/wosonday/swatprep:0.2.2`.
+4. Bật branch protection cho `main` (bắt buộc check `test`).
+5. Giai đoạn 2, trang đầu tiên: chọn `config.yaml` có sẵn → Validate → Build → bảng QA + `manifest.json`. Cần máy có dữ liệu thật (laptop chính).
+
+**Lưu ý khi chuyển máy:** chạy `git status` → `git switch main` → `git pull` → `uv sync --locked --extra geo --extra app --extra dev` → `uv run python -m pytest -q` trước khi làm việc. `.env` và dữ liệu không đi theo Git.

@@ -66,7 +66,7 @@ def package_versions() -> dict[str, str]:
 def _driver_checks(names, list_drivers) -> list[Check]:
     try:
         available = list_drivers()
-    except Exception as exc:  # thư viện thiếu hoặc hỏng → báo, không làm sập trang
+    except Exception as exc:  # missing/broken library -> report it, don't crash the page
         return [Check(n, False, f"error: {exc}") for n in names]
     return [Check(n, n in available, "available" if n in available else "missing") for n in names]
 
@@ -77,7 +77,7 @@ def _rasterio_drivers():
         return env.drivers()
 
 
-def _pyogrio_drivers():  # geopandas đọc shapefile/GPKG qua pyogrio
+def _pyogrio_drivers():  # geopandas read shapefile/GPKG via pyogrio
     import pyogrio
     return pyogrio.list_drivers()
 

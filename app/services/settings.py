@@ -1,4 +1,4 @@
-"""Đường dẫn làm việc đọc từ biến môi trường (Twelve-Factor: Config)."""
+"""Working paths read from environment variables (Twelve-Factor: Config)."""
 from __future__ import annotations
 
 import os
