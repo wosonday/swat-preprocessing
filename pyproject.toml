@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swatprep"
-version = "0.2.2"
+version = "0.2.3"
 description = "Preprocess raw geospatial and hydro-meteorological data for SWAT/SWAT+ workflows"
 readme = "README.md"
 requires-python = ">=3.10"
