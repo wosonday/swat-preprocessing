@@ -25,6 +25,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder --chown=swat:swat /app/.venv /app/.venv
 COPY --chown=swat:swat app ./app
+COPY --chown=swat:swat .streamlit ./.streamlit
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 \
     SWATPREP_DATA_ROOT=/data SWATPREP_WORKSPACE=/workspace
 USER swat

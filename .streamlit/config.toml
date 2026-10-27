@@ -1,0 +1,47 @@
+# Theme from the OpenDesign design system: neutral greys carry the interface,
+# green is kept for success feedback. Token names in comments.
+
+[theme]
+font = "Albert Sans:https://fonts.googleapis.com/css2?family=Albert+Sans:ital,wght@0,100..900;1,100..900&display=swap"
+codeFont = "ui-monospace, SFMono-Regular, monospace"   # JiduMono Pro is not hosted; system mono fallback
+baseFontSize = 14          # body 14px
+baseFontWeight = 600       # body weight 600
+headingFontWeights = 700
+baseRadius = "4px"         # radius-medium (controls)
+buttonRadius = "999px"     # radius-pill
+showWidgetBorder = true
+showSidebarBorder = true
+
+[theme.light]
+backgroundColor = "#ffffff"            # bg
+secondaryBackgroundColor = "#fafafa"   # bg-panel
+textColor = "#494949"                  # text
+borderColor = "#dbdbdb"                # border
+primaryColor = "#353535"               # selected
+linkColor = "#1a74ff"                  # blue
+blueColor = "#1a74ff"                  # blue
+greenColor = "#00aa54"                 # green
+greenBackgroundColor = "#f5ffee"       # green-bg
+redColor = "#f04142"                   # red
+orangeColor = "#ff7528"                # amber
+codeBackgroundColor = "#fafafa"        # code-body-bg
+codeTextColor = "#5c5c5c"              # text-muted (keep green for success only)
+dataframeHeaderBackgroundColor = "#ededed"  # bg-subtle
+
+[theme.dark]
+backgroundColor = "#202020"            # bg
+secondaryBackgroundColor = "#353535"   # bg-panel
+textColor = "#ededed"                  # text
+borderColor = "#5c5c5c"                # border
+# selected has no dark value, and Streamlit draws white labels on primary buttons, so no dark
+# token works here: #757575 is derived to give white text 4.6:1 and 3.5:1 against bg (WCAG AA).
+primaryColor = "#757575"
+linkColor = "#3aa5f0"                  # blue
+blueColor = "#3aa5f0"                  # blue
+greenColor = "#3bbf7d"                 # green
+greenBackgroundColor = "#164111"       # green-bg
+redColor = "#ff5e5e"                   # red
+orangeColor = "#ffc740"                # amber
+codeBackgroundColor = "#18181b"        # code-body-bg
+codeTextColor = "#bdbdbd"              # text-muted
+dataframeHeaderBackgroundColor = "#494949"  # bg-subtle
