@@ -1,11 +1,24 @@
 @echo off
 setlocal
 rem ---------------------------------------------------------------------------
-rem  SWATprep installer for Windows. Double-click to install; run again to update.
-rem  Needs internet the first time. No Docker, no admin rights.
+rem  SWATprep installer for Windows. Double-click to install or update to the
+rem  latest release. To install a given release:  install.bat v0.3.0
+rem  Needs internet. No Docker, no admin rights.
 rem ---------------------------------------------------------------------------
-set "VERSION=v0.3.0"
-if not defined SWATPREP_SOURCE set "SWATPREP_SOURCE=swatprep[geo,app] @ https://github.com/wosonday/swat-preprocessing/archive/refs/tags/%VERSION%.zip"
+set "REPO=wosonday/swat-preprocessing"
+if not defined SWATPREP_RELEASES_API set "SWATPREP_RELEASES_API=https://api.github.com/repos/%REPO%/releases/latest"
+
+set "VERSION=%~1"
+if defined VERSION goto :have_version
+echo Looking up the latest release...
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = 'Tls12'; Invoke-RestMethod -Uri '%SWATPREP_RELEASES_API%' | Select-Object -ExpandProperty tag_name"`) do set "VERSION=%%T"
+if not defined VERSION goto :noversion
+:have_version
+if not defined SWATPREP_SOURCE set "SWATPREP_SOURCE=swatprep[geo,app] @ https://github.com/%REPO%/archive/refs/tags/%VERSION%.zip"
+if defined SWATPREP_DRY_RUN (
+    echo Would install %VERSION% from: %SWATPREP_SOURCE%
+    exit /b 0
+)
 
 where uv >nul 2>nul
 if errorlevel 1 (
@@ -21,10 +34,17 @@ for /f "usebackq delims=" %%B in (`uv tool dir --bin`) do set "BIN=%%B"
 powershell -NoProfile -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\SWATprep.lnk'); $s.TargetPath = '%BIN%\swatprep-ui.exe'; $s.WorkingDirectory = $env:USERPROFILE; $s.Description = 'SWATprep web app'; $s.Save()" || goto :fail
 
 echo.
-echo Done. Double-click "SWATprep" on your Desktop to start.
+echo Done: SWATprep %VERSION%. Double-click "SWATprep" on your Desktop to start.
 echo Closing the black window stops the app.
 pause
 exit /b 0
+
+:noversion
+echo.
+echo Could not find the latest release (no internet, or GitHub is busy).
+echo Try again later, or run:  install.bat v0.3.0
+pause
+exit /b 1
 
 :fail
 echo.

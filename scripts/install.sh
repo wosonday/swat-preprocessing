@@ -1,8 +1,26 @@
 #!/usr/bin/env sh
-# SWATprep installer for Linux and macOS. Run: sh install.sh  (run again to update)
+# SWATprep installer for Linux and macOS.
+#   sh install.sh            install or update to the latest release
+#   sh install.sh v0.3.0     install a given release
 set -eu
-VERSION="v0.3.0"
-SWATPREP_SOURCE="${SWATPREP_SOURCE:-swatprep[geo,app] @ https://github.com/wosonday/swat-preprocessing/archive/refs/tags/${VERSION}.zip}"
+REPO="wosonday/swat-preprocessing"
+API="${SWATPREP_RELEASES_API:-https://api.github.com/repos/${REPO}/releases/latest}"
+
+VERSION="${1:-}"
+if [ -z "$VERSION" ]; then
+    echo "Looking up the latest release..."
+    VERSION="$(curl -fsSL "$API" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+    if [ -z "$VERSION" ]; then
+        echo "Could not find the latest release. Try again later, or run: sh install.sh v0.3.0" >&2
+        exit 1
+    fi
+fi
+SWATPREP_SOURCE="${SWATPREP_SOURCE:-swatprep[geo,app] @ https://github.com/${REPO}/archive/refs/tags/${VERSION}.zip}"
+
+if [ -n "${SWATPREP_DRY_RUN:-}" ]; then
+    echo "Would install ${VERSION} from: ${SWATPREP_SOURCE}"
+    exit 0
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "Installing uv..."
@@ -29,4 +47,4 @@ DESKTOP
     echo "Added SWATprep to the application menu."
 fi
 
-echo "Done. Start it with: $BIN/swatprep-ui"
+echo "Done: SWATprep ${VERSION}. Start it with: $BIN/swatprep-ui"
