@@ -1,4 +1,4 @@
-"""Project page: open or create a config, edit it as a form, validate, build and review QA."""
+"""Project page: open a project folder, pick or create a config in it, edit it, validate, build and explore."""
 import os
 import string
 from pathlib import Path
@@ -7,14 +7,15 @@ import streamlit as st
 
 from app.services import project_io, runner
 from app.services.form_layout import SECTIONS
-from app.services.form_state import count_for, file_errors, new_config, schema_errors
-from app.services.recent import add_recent, load_recent
+from app.services.form_state import count_for, file_errors, schema_errors
+from app.services.projects import default_config, list_configs
 from app.services.runner import RunResult
 from app.services.settings import load_settings
 from app.ui.branding import setup_page
-from app.ui.browse import browse_dialog
 from app.ui.explore import render_explore
-from app.ui.fields import FormContext, crs_select, reset_form_state, toggle_part
+from app.ui.fields import FormContext, reset_form_state, toggle_part
+from app.ui.project_sidebar import new_config_dialog, render_config_picker, render_project_header
+from app.ui.projects_home import render_home
 from app.ui.results import render_result
 from app.ui.sections import render_project, render_section
 
@@ -23,15 +24,6 @@ ALL = "All configured"
 setup_page("Project · swatprep")
 settings = load_settings()
 state = st.session_state
-
-if "project_dir" not in state:
-    history = load_recent()
-    state["project_dir"] = history[0] if history else os.environ.get("SWATPREP_WORKSPACE", "")
-
-
-def _folder(raw: str) -> Path | None:
-    folder = Path(raw.strip()) if raw and raw.strip() else None
-    return folder if folder and folder.is_dir() else None
 
 
 def _roots(project_dir: Path | None) -> dict[str, Path]:
@@ -46,95 +38,64 @@ def _roots(project_dir: Path | None) -> dict[str, Path]:
     return {name: p for name, p in candidates.items() if p is not None and p.is_dir()}
 
 
-def _use_recent() -> None:
-    state["project_dir"] = state["recent_choice"]
-
-
-def _open_from_list() -> None:
-    state["config_path"] = str(Path(state["project_dir"].strip()) / state["config_choice"])
-
-
-def _create(key: str) -> None:
-    target = Path(state[key].strip())
-    if target.exists():
-        state["new_error"] = f"{target} already exists. Open it instead."
-        return
-    crs = (state["new_crs"] or "").strip()
-    project_io.save_yaml(new_config(state["new_name"].strip() or target.parent.name, crs), target)
-    state["new_error"] = None
-    state["config_path"] = str(target)
-
-
-def _load(path: Path, project_dir: Path | None) -> None:
+def _load(path: Path) -> None:
     state["cfg"] = project_io.load_yaml(path)
     state["clean_yaml"] = project_io.dump_yaml(state["cfg"])  # what "no changes" looks like
     state["loaded_path"] = str(path)
     state["errors_on"] = False
     state["file_errors"] = {}
     reset_form_state()
-    inside = project_dir is not None and path.resolve().is_relative_to(project_dir.resolve())
-    add_recent(project_dir if inside else path.parent)
 
 
 def _discard() -> None:
     state["loaded_path"] = None  # forces a reload from disk
 
 
-# ---------------------------------------------------------------- sidebar: project folder / config
-with st.sidebar:
-    st.subheader("Project folder")
-    history = load_recent()
-    if history:
-        st.selectbox("Recent", history, index=None, placeholder="Choose a recent folder…", key="recent_choice",
-                     on_change=_use_recent)
-    st.text_input("Folder", key="project_dir", placeholder="Paste a folder path…")
-    project_dir = _folder(state["project_dir"])
-    roots = _roots(project_dir)
-    if st.button("Browse", icon=":material/folder_open:", key="browse_project"):
-        browse_dialog("project_dir", roots, pick="dir")
-    if state["project_dir"].strip() and project_dir is None:
-        st.caption(":red[:material/error: Folder not found]")
-
-    st.subheader("Config")
-    configs = project_io.list_configs(project_dir) if project_dir else []
-    st.selectbox("Open config", [p.relative_to(project_dir).as_posix() for p in configs], index=None,
-                 placeholder="Choose a config…" if configs else "No config in this folder", key="config_choice",
-                 on_change=_open_from_list, disabled=not configs)
-    st.text_input("Config path", key="config_path", placeholder="Paste a path to config.yaml…")
-    if st.button("Browse", icon=":material/folder_open:", key="browse_config"):
-        browse_dialog("config_path", roots, suffixes=(".yaml", ".yml"))
-    with st.expander("New config"):
-        new_key = f"new_path::{project_dir}"
-        with st.form("new_config", border=False):
-            st.text_input("File", key=new_key, value=str((project_dir or Path.home()) / "config.yaml"))
-            st.text_input("Project name", key="new_name", placeholder="MaDa_Basin_2026")
-            crs_select("CRS", key="new_crs")
-            st.form_submit_button("Create", icon=":material/add:", on_click=_create, args=(new_key,))
-        if state.get("new_error"):
-            st.error(state["new_error"], icon=":material/error:")
-
-raw = state.get("config_path", "").strip()
-path = Path(raw) if raw else None
-if path is None or not path.is_file():
-    st.title("Project")
-    if path is None:
-        st.info("Open a config to start: choose one from the workspace, paste a path, browse, or create a new one.")
-    else:
-        st.error(f"Config not found: `{path}`", icon=":material/error:")
+# ---------------------------------------------------------------- no project open: the Projects screen
+project = Path(state["project"]) if state.get("project") else None
+if project is None or not project.is_dir():
+    state["project"] = None
+    render_home(_roots(None))
     st.stop()
 
-if state.get("loaded_path") != str(path):
+# ---------------------------------------------------------------- project open: pick its config
+configs = list_configs(project)
+current = Path(state["config_path"]) if state.get("config_path") else None
+if current not in configs:
+    current = default_config(project)
+    state["config_path"] = str(current) if current else None
+
+load_error = None
+if current is not None and state.get("loaded_path") != str(current):
     try:
-        _load(path, project_dir)
+        _load(current)
     except project_io.ConfigFileError as exc:
         state["loaded_path"] = None
-        st.title("Project")
-        st.error(f"Cannot read the config: {exc}", icon=":material/error:")
-        st.stop()
+        load_error = exc
+loaded = current is not None and state.get("loaded_path") == str(current)
+locked = loaded and project_io.dump_yaml(state["cfg"]) != state["clean_yaml"]
+
+with st.sidebar:
+    render_project_header(project, locked)
+    crs = (state["cfg"].get("project") or {}).get("crs") if loaded else None
+    crs = str(crs) if crs else None   # ruamel gives a quoted-string subclass; widgets and pyproj need str
+    render_config_picker(project, configs, current, locked, crs=crs)
+
+if current is None:
+    st.title(project.name or str(project))
+    st.info("This project has no config yet.", icon=":material/info:")
+    if st.button("New config", type="primary", icon=":material/add:", key="first_config"):
+        new_config_dialog(project)
+    st.stop()
+if not loaded:
+    st.title(project.name or str(project))
+    st.error(f"Cannot read `{current.name}`: {load_error}", icon=":material/error:")
+    st.stop()
+path = current
 
 cfg: dict = state["cfg"]
 cfg.setdefault("project", {})
-ctx = FormContext(cfg=cfg, base_dir=path.parent, roots=_roots(project_dir) or {"Config folder": path.parent})
+ctx = FormContext(cfg=cfg, base_dir=path.parent, roots=_roots(project))
 
 # ---------------------------------------------------------------- sidebar: functions / save
 with st.sidebar:

@@ -68,7 +68,10 @@ def _path_status(ctx: FormContext, raw: str, kind: str) -> None:
 
 def _mapping(ctx: FormContext, section: dict, spec: FieldSpec, path: str, key: str) -> None:
     init_key = key + "::init"
-    if init_key not in st.session_state:
+    # Rebuild the table from the config whenever the editor's own state is gone: on first draw, and after
+    # Streamlit drops it because the table was not drawn on a run (Explore mode, fill type or section off).
+    # Reusing the old init rows then would show stale rows and write them back over the user's edits.
+    if key not in st.session_state or init_key not in st.session_state:
         st.session_state[init_key] = [
             {"variable": k, "name": v} for k, v in to_widget(spec, section.get(spec.name)).items()
         ]

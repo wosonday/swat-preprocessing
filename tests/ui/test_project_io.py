@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.project_io import ConfigFileError, dump_yaml, list_configs, load_yaml, save_yaml
+from app.services.project_io import ConfigFileError, dump_yaml, load_yaml, save_yaml
 
 
 def test_round_trip_keeps_file_unchanged(example_project):
@@ -36,16 +36,3 @@ def test_save_creates_parent_folders(tmp_path):
     target = tmp_path / "new" / "config.yaml"
     save_yaml({"project": {"name": "X"}}, target)
     assert load_yaml(target)["project"]["name"] == "X"
-
-
-def test_list_configs_up_to_three_levels(tmp_path):
-    for rel in ["a.yaml", "p1/config.yml", "p1/sub/c.yaml", "p1/sub/deep/too_deep.yaml"]:
-        f = tmp_path / rel
-        f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text("project: {}\n")
-    found = [p.relative_to(tmp_path).as_posix() for p in list_configs(tmp_path)]
-    assert found == ["a.yaml", "p1/config.yml", "p1/sub/c.yaml"]
-
-
-def test_list_configs_missing_workspace(tmp_path):
-    assert list_configs(tmp_path / "missing") == []

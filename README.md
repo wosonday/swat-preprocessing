@@ -25,7 +25,7 @@ option) · [examples/config_full.yaml](examples/config_full.yaml) (annotated tem
 | Streamflow | Long-format CSV validation and per-station output |
 | Quality assurance | Every step returns `pass` / `warn` / `fail` checks; `manifest.json` and `qa_report.md` are written for each build |
 | Converters | Vendor `.day` files, wide streamflow tables, raw station files to CSV / SWAT2012 / SWAT+ |
-| Web app | Streamlit form over the same YAML: open a project folder, switch sections on or off, paste or browse for files, Validate (errors shown on the field) and Build, QA table and `manifest.json` download; comments in the YAML are kept |
+| Web app | Streamlit form over the same YAML: open or create a project folder and its configs, switch sections on or off, paste or browse for files, Validate (errors shown on the field) and Build, QA table and `manifest.json` download; comments in the YAML are kept |
 | Distribution | One-click install without Docker (`install.bat` / `install.sh`), Docker image `ghcr.io/wosonday/swatprep`, a GitHub Release per version |
 
 Out of scope: watershed delineation, HRU/LSU generation, a complete SWAT+ `project.sqlite`,
@@ -51,8 +51,9 @@ works too; uv is preferred because it installs exactly the versions in `uv.lock`
 
 1. Start **SWATprep** (Desktop shortcut, or `swatprep-ui`); the browser opens. The app only listens on
    this computer (`localhost`).
-2. On the **Project** page, set the project folder (paste a path or **Browse**), then open a config or
-   create a new one.
+2. On the **Project** page, the **Projects** screen lists recent projects; open a project folder or create
+   a new one (a folder plus its first `config.yaml`). A project's configs are the `.yaml` files in that
+   folder: pick one in the sidebar or add one with **New config**.
 3. Switch on the sections you need (DEM, Land use, Soil, Weather, Streamflow, Clip) and fill the fields;
    paths can be pasted or picked with **Browse**.
 4. **Validate**: missing files and invalid values are marked on the fields. **Build**: review the QA

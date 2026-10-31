@@ -31,3 +31,9 @@ def test_check_crs():
     assert check_crs("EPSG:4326")[0] == "warn"
     assert check_crs("VN-2000 / UTM") == ("error", "not a recognised CRS")
     assert check_crs("+proj=utm +zone=48 +datum=WGS84 +units=m +no_defs")[0] == "ok"
+
+
+def test_check_crs_accepts_string_subclasses():
+    from ruamel.yaml.scalarstring import DoubleQuotedScalarString
+
+    assert check_crs(DoubleQuotedScalarString("EPSG:32648"))[0] == "ok"

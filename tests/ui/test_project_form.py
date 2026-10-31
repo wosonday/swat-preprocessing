@@ -3,18 +3,16 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from app.services.project_io import load_yaml
-from app.services.recent import load_recent
 
 PAGE = str(Path(__file__).resolve().parents[2] / "app" / "pages" / "1_Project.py")
 
 
 @pytest.fixture
-def page(monkeypatch, example_project):
+def page(monkeypatch, example_project, open_project):
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
     monkeypatch.setenv("SWATPREP_DATA_ROOT", str(example_project.parent / "data"))
     at = AppTest.from_file(PAGE, default_timeout=60).run()
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
+    open_project(at, example_project.parent)
     assert not at.exception
     return at
 
@@ -91,51 +89,6 @@ def test_build_from_form(page, example_project):
     assert (example_project.parent / "output" / "manifest.json").is_file()
 
 
-def test_new_config(monkeypatch, tmp_path):
-    monkeypatch.setenv("SWATPREP_WORKSPACE", str(tmp_path))
-    at = AppTest.from_file(PAGE, default_timeout=60).run()
-    target = tmp_path / "basin" / "config.yaml"
-    [t for t in at.text_input if t.label == "File"][0].set_value(str(target))
-    at.text_input(key="new_name").set_value("Basin")
-    at.selectbox(key="new_crs").select("EPSG:32648")
-    submit = [b for b in at.button if b.label == "Create"][0]
-    submit.click().run()
-    assert not at.exception
-    assert target.is_file()
-    assert load_yaml(target)["project"]["name"] == "Basin"
-    assert at.title[0].value == "Basin"
-
-
-def test_project_folder_outside_the_repo(monkeypatch, example_project):
-    monkeypatch.delenv("SWATPREP_WORKSPACE", raising=False)
-    at = AppTest.from_file(PAGE, default_timeout=60).run()
-    assert at.text_input(key="project_dir").value == ""
-    assert at.selectbox(key="config_choice").disabled
-
-    at.text_input(key="project_dir").set_value(str(example_project.parent)).run()
-    assert at.selectbox(key="config_choice").options == ["config_minimal.yaml"]
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
-    assert not at.exception
-    assert at.title[0].value == "ExampleBasin_2024"
-    assert load_recent() == [str(example_project.parent.resolve())]
-
-
-def test_recent_folder_is_preselected(monkeypatch, example_project):
-    monkeypatch.delenv("SWATPREP_WORKSPACE", raising=False)
-    from app.services.recent import add_recent
-
-    add_recent(example_project.parent)
-    at = AppTest.from_file(PAGE, default_timeout=60).run()
-    assert at.text_input(key="project_dir").value == str(example_project.parent.resolve())
-
-
-def test_missing_project_folder_is_flagged(monkeypatch, tmp_path):
-    monkeypatch.delenv("SWATPREP_WORKSPACE", raising=False)
-    at = AppTest.from_file(PAGE, default_timeout=60).run()
-    at.text_input(key="project_dir").set_value(str(tmp_path / "nope")).run()
-    assert any("Folder not found" in c.value for c in at.caption)
-
-
 def test_crs_is_a_searchable_list(page):
     crs = page.selectbox(key="f::project.crs")
     assert crs.value == "EPSG:32648" and len(crs.options) > 1000
@@ -144,22 +97,47 @@ def test_crs_is_a_searchable_list(page):
     assert page.session_state["cfg"]["project"]["crs"] == "EPSG:3405"
 
 
-def test_custom_crs_in_the_config_stays_selected(monkeypatch, example_project):
+def test_custom_crs_in_the_config_stays_selected(monkeypatch, example_project, open_project):
     proj = "+proj=utm +zone=48 +datum=WGS84 +units=m +no_defs"
     text = example_project.read_text(encoding="utf-8").replace('crs: "EPSG:32648"', f'crs: "{proj}"')
     example_project.write_text(text, encoding="utf-8")
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
     at = AppTest.from_file(PAGE, default_timeout=60).run()
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
+    open_project(at, example_project.parent)
     crs = at.selectbox(key="f::project.crs")
     assert crs.value == proj and crs.options[0] == proj
     assert at.button(key="save").disabled
 
 
-def test_unknown_crs_is_flagged(monkeypatch, example_project):
+def test_unknown_crs_is_flagged(monkeypatch, example_project, open_project):
     text = example_project.read_text(encoding="utf-8").replace('crs: "EPSG:32648"', 'crs: "EPSG:999999"')
     example_project.write_text(text, encoding="utf-8")
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
     at = AppTest.from_file(PAGE, default_timeout=60).run()
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
+    open_project(at, example_project.parent)
     assert any("not a recognised CRS" in c.value for c in at.caption)
+
+
+NETCDF_FILL = """  fill:
+    type: netcdf
+    output_dir: "./data/filled"
+    netcdf:
+      path: "./data/grid.nc"
+      var_map: { precip: pr, tmax: tasmax }
+
+"""
+
+
+def test_variable_map_edits_survive_explore(monkeypatch, example_project, open_project):
+    text = example_project.read_text(encoding="utf-8").replace("streamflow:", NETCDF_FILL + "streamflow:", 1)
+    example_project.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
+    at = AppTest.from_file(PAGE, default_timeout=60).run()
+    open_project(at, example_project.parent)
+    # an edit in the table is written to cfg on that run (AppTest cannot type into st.data_editor)
+    at.session_state["cfg"]["weather"]["fill"]["netcdf"]["var_map"]["tmin"] = "tasmin"
+    at.segmented_control(key="mode").set_value("Explore").run()
+    at.segmented_control(key="mode").set_value("Configure").run()
+    assert at.session_state["cfg"]["weather"]["fill"]["netcdf"]["var_map"] == {
+        "precip": "pr", "tmax": "tasmax", "tmin": "tasmin"}
+    assert any(c.value == "Variable map *" for c in at.caption)

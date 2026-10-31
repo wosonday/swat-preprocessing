@@ -43,7 +43,7 @@ def check_crs(value: str) -> tuple[str, str]:
     except ImportError:
         return "unknown", "cannot check without pyproj"
     try:
-        crs = CRS.from_user_input(value)
+        crs = CRS.from_user_input(str(value))
     except CRSError:
         return "error", "not a recognised CRS"
     if not crs.is_projected:

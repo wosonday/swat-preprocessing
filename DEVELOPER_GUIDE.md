@@ -1510,6 +1510,7 @@ app/
     runner.py             validate/build -> RunResult, không bao giờ ném lỗi
     fs_browser.py         liệt kê thư mục, chặn path traversal
     recent.py             thư mục dự án gần đây (~/.swatprep/)
+    projects.py           dự án = thư mục; config = file .yaml ở gốc; tạo dự án / config
 ```
 
 Phụ thuộc một chiều: `pages -> ui -> services -> swatprep`. Lõi `swatprep/` không biết gì về giao diện.
