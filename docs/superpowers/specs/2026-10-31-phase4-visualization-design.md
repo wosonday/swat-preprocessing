@@ -225,8 +225,8 @@ TDD; dữ liệu nhỏ tự tạo, có đáp án biết trước.
 | Lát | Nội dung | Phát hành |
 |---|---|---|
 | 4a | Bộ chọn Configure/Explore, `explore_data`, `climatology`, `flow_stats`, `charts` (phần dòng chảy), phần **Streamflow**; kèm icon app | `v0.4.0` |
-| 4b | Phần **Weather**: heatmap, chi tiết, khí hậu mưa | `v0.5.0` |
-| 4c | Phần **Map**: `raster_view`, pydeck | `v0.6.0` |
+| 4c | Phần **Map**: `raster_view`, pydeck (làm trước 4b theo yêu cầu, gộp vào `v0.4.0`) | `v0.4.0` |
+| 4b | Phần **Weather**: heatmap, chi tiết, khí hậu mưa (gộp vào `v0.4.0`) | `v0.4.0` |
 
 Mỗi lát hoàn thành khi:
 
@@ -250,6 +250,40 @@ Mỗi lát hoàn thành khi:
 - Bộ chọn Configure/Explore: các widget của form không được vẽ khi ở Explore nên Streamlit xoá trạng thái
   của chúng; khi quay lại Configure, giá trị được dựng lại từ `state["cfg"]` (test `test_back_to_configure_keeps_edits`).
 
+### Lát 4c (gộp vào v0.4.0)
+
+- **Ảnh xem trước chiếu sang EPSG:3857, không phải EPSG:4326** như mục 4.3: deck.gl kéo giãn `BitmapLayer`
+  tuyến tính trên màn hình, tức trong không gian Web Mercator, nên ảnh phải ở 3857 để khớp nền bản đồ;
+  chỉ toạ độ bốn góc (`bounds`) được đổi sang độ. Với lưu vực lớn (vài độ vĩ), ảnh ở 4326 sẽ lệch theo vĩ độ.
+- Sai lệch bounds so với phạm vi gốc ≤ 1 pixel do lưới sau khi chiếu được làm tròn (test dùng dung sai 0,0005°).
+- pydeck hiểu chuỗi là biểu thức JavaScript (`@@=`), nên data URI của ảnh phải bọc trong `pdk.types.String`.
+- Màu: DEM dùng thang viridis (đồng đều cảm nhận, đọc được khi mù màu; Smith & van der Walt, 2015);
+  lớp phân loại dùng bảng 16 màu cố định, lặp lại khi nhiều lớp hơn.
+- Basemap **None** đặt `map_provider=None`: trình duyệt không tải ô bản đồ nào.
+- Thời gian đọc, chiếu và đếm diện tích: lưới thử 300 × 400 ≈ 0,02–0,05 s mỗi lớp; raster 3.000 × 4.000
+  (12 triệu pixel, tile 256) 0,55 s (phân loại) và 0,76 s (liên tục); PNG gửi lên trình duyệt ≤ 1,2 MB
+  (trường hợp xấu nhất: nhiễu ngẫu nhiên).
+
+### Lát 4b (gộp vào v0.4.0)
+
+- Weather là lựa chọn đầu tiên của Explore (Weather | Streamflow | Map).
+- Heatmap vẽ hai lớp: mọi ô xám mờ (độ mờ 0,15) và chỉ các ô có ngày thiếu được tô theo thang `orangered`
+  0–100%; nhờ vậy ô đủ ngày không bị tô màu sáng gắt ở giao diện tối. Chiều cao theo `alt.Step(20)` mỗi trạm
+  để không mất nhãn trạm.
+- Màu thống nhất: đo thực xám `#8a8a8a`, đã điền cam `#ff7528`, còn thiếu đỏ `#f04142`; mưa vẽ cột, các biến
+  khác vẽ đường.
+- `weather.data_dir` trùng `fill.output_dir` (cách dùng A: đã trỏ build vào số liệu đã điền) thì không có
+  lựa chọn Filled và app ghi chú lý do.
+- Đọc 8 trạm × 10 năm × 3 biến (dữ liệu thử) qua lõi kèm bản đã điền: 0,44 s.
+
+### Bổ sung ngoài Giai đoạn 4: danh sách CRS (yêu cầu ngày 2026-10-31)
+
+- `project.crs` và ô CRS của **New config** là danh sách tìm kiếm được: 5 CRS hay dùng ở Việt Nam
+  (WGS 84 / UTM 47N, 48N, 49N; VN-2000 / UTM 48N, 49N) rồi toàn bộ CRS chiếu EPSG còn hiệu lực từ
+  cơ sở dữ liệu PROJ (pyproj, khoảng 5.300 mục); vẫn gõ hoặc dán được giá trị khác (mã EPSG, WKT, chuỗi PROJ).
+- Dòng trạng thái dưới ô: xanh khi là CRS chiếu (kèm tên và đơn vị), cam khi là CRS địa lý, đỏ khi không
+  nhận ra. Không có pyproj (thiếu extra `geo`) thì chỉ có 5 CRS hay dùng và không kiểm tra.
+
 ## Tham khảo
 
 - WMO (2017). *WMO Guidelines on the Calculation of Climate Normals* (WMO-No. 1203), mục 4.4.1, 4.4.2, 4.6. https://www.ncei.noaa.gov/pub/data/normals/WMO/Guidelines%20for%20the%20Calculation%20of%20Climate%20Normals.WMO%20No1203_en.pdf
@@ -261,4 +295,6 @@ Mỗi lát hoàn thành khi:
 - Streamlit – Release notes 2026: https://docs.streamlit.io/develop/quick-reference/release-notes/2026
 - Streamlit – `st.pydeck_chart`: https://docs.streamlit.io/develop/api-reference/charts/st.pydeck_chart
 - deck.gl – BitmapLayer: https://deck.gl/docs/api-reference/layers/bitmap-layer
+- Smith, N. J. & van der Walt, S. (2015). *A Better Default Colormap for Matplotlib* (viridis). SciPy 2015. https://bids.github.io/colormap/
+- PROJ / pyproj – CRS database: https://pyproj4.github.io/pyproj/stable/api/database.html
 - rasterio – Resampling / decimated reads: https://rasterio.readthedocs.io/en/stable/topics/resampling.html

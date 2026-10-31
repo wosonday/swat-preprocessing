@@ -8,6 +8,7 @@ from pathlib import Path
 import streamlit as st
 from pydantic import BaseModel
 
+from app.services.crs_options import check_crs, crs_label, crs_options
 from app.services.form_layout import LABELS, LAYOUT, path_kind
 from app.services.form_model import FieldSpec, field_spec, humanize
 from app.services.form_state import apply, from_widget, to_widget
@@ -84,6 +85,24 @@ def _mapping(ctx: FormContext, section: dict, spec: FieldSpec, path: str, key: s
     apply(section, spec, value)
 
 
+def crs_select(label: str, key: str, **kwargs) -> str | None:
+    """A searchable list of projected CRSs that also accepts a typed or pasted value (EPSG code, WKT, PROJ)."""
+    options = list(crs_options())
+    current = st.session_state.get(key)
+    if current == "":
+        st.session_state[key] = current = None
+    if current and current not in options:
+        options.insert(0, current)               # a custom CRS already in the config stays selectable
+    value = st.selectbox(label, options, index=None, format_func=crs_label, accept_new_options=True, key=key,
+                         placeholder="Search by EPSG code or name, or paste a CRS…", **kwargs)
+    if value:
+        status, message = check_crs(value)
+        style = {"ok": ":green[:material/check_circle: ", "warn": ":orange[:material/warning: ",
+                 "error": ":red[:material/error: ", "unknown": ":gray[:material/info: "}[status]
+        st.caption(style + message + "]")
+    return value
+
+
 def render_field(ctx: FormContext, model: type[BaseModel], name: str, section_path: str) -> None:
     spec = field_spec(model, name)
     section = section_at(ctx.cfg, section_path)
@@ -123,6 +142,8 @@ def render_field(ctx: FormContext, model: type[BaseModel], name: str, section_pa
         st.date_input(label, min_value=DATE_RANGE[0], max_value=DATE_RANGE[1], **common)
     elif spec.kind == "text_list":
         st.text_input(label, placeholder="Comma-separated, empty for all", **common)
+    elif path == "project.crs":
+        crs_select(label, **common)
     else:
         st.text_input(label, **common)
     _error(ctx, path)

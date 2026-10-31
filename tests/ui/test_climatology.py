@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.services.climatology import monthly_climatology, monthly_values
+from app.services.climatology import completeness, monthly_climatology, monthly_values
 
 
 def july(values=1.0) -> pd.Series:
@@ -89,3 +89,12 @@ def test_climatology_has_twelve_months_even_without_data():
     clim = monthly_climatology(five_julys(5))
     assert list(clim["month"]) == list(range(1, 13))
     assert clim.set_index("month").loc[1, "n_years"] == 0 and not clim.set_index("month").loc[1, "ok"]
+
+
+def test_completeness_per_station_and_month():
+    days = pd.date_range("2005-06-29", "2005-07-31")
+    wide = pd.DataFrame({"A": 1.0, "B": 1.0}, index=days)
+    wide.loc["2005-07-01":"2005-07-03", "B"] = np.nan
+    table = completeness(wide).set_index(["station", "period"])
+    assert table.loc[("A", "2005-06"), "n_days"] == 2 and table.loc[("A", "2005-07"), "pct_missing"] == 0
+    assert table.loc[("B", "2005-07"), "n_missing"] == 3 and table.loc[("B", "2005-07"), "pct_missing"] == 9.7

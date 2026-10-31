@@ -33,7 +33,7 @@ uv run python -m pytest -q
 
 **Kết quả mong đợi** (v0.3.1, đã cài đủ `geo`, `app`, `dev`):
 ```
-378 passed   (khoảng 10-25 s; test build wheel trong tests/ui/test_launch.py chiếm phần lớn)
+413 passed   (khoảng 10-25 s; test build wheel trong tests/ui/test_launch.py chiếm phần lớn)
 ```
 
 Nếu chưa cài `rasterio`/`geopandas` (nhóm `geo`), các test raster và `clip` sẽ bị skip.
