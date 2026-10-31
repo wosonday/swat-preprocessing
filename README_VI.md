@@ -2,7 +2,7 @@
 
 `swatprep` là thư viện Python kèm CLI để chuẩn bị dữ liệu DEM, sử dụng đất, thổ nhưỡng, khí tượng và
 dòng chảy quan trắc cho SWAT Classic và SWAT+. Anh/chị mô tả dự án một lần trong file YAML rồi chạy
-`swatprep build`.
+`swatprep build`, hoặc điền chính file YAML đó trên **giao diện web** (`swatprep-ui`).
 
 Công cụ giới hạn có chủ ý ở vai trò **tiền xử lý và ghi định dạng đầu vào**; không thay thế QSWAT,
 QSWAT+, SWAT+ Editor, TauDEM, WhiteboxTools, SWAT+ Toolbox, PEST hay quy trình hiệu chỉnh.
@@ -10,7 +10,8 @@ QSWAT+, SWAT+ Editor, TauDEM, WhiteboxTools, SWAT+ Toolbox, PEST hay quy trình 
 Tài liệu chi tiết: **[docs/USER_GUIDE_VI.md](docs/USER_GUIDE_VI.md)** (hướng dẫn từng bước, mọi tham số YAML)
 · [examples/config_full.yaml](examples/config_full.yaml) (file mẫu có chú thích) ·
 [docs/WEATHER_OUTPUT.md](docs/WEATHER_OUTPUT.md) · [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) ·
-[TESTING_GUIDE.md](TESTING_GUIDE.md).
+[TESTING_GUIDE.md](TESTING_GUIDE.md) · [docs/INSTALL.md](docs/INSTALL.md) (cài đặt cho nhóm) ·
+[docs/RELEASING.md](docs/RELEASING.md) · [CHANGELOG.md](CHANGELOG.md).
 
 ## Chức năng
 
@@ -22,19 +23,43 @@ Tài liệu chi tiết: **[docs/USER_GUIDE_VI.md](docs/USER_GUIDE_VI.md)** (hư�
 | Dòng chảy | Kiểm tra CSV dạng dài và ghi theo trạm |
 | Kiểm soát chất lượng | Mọi bước trả về kiểm tra `pass` / `warn` / `fail`; mỗi lần build ghi `manifest.json` và `qa_report.md` |
 | Chuyển đổi | File `.day`, bảng dòng chảy dạng rộng, file trạm thô -> CSV / SWAT2012 / SWAT+ |
+| Giao diện web | Form Streamlit trên chính file YAML: chọn thư mục dự án, bật/tắt từng mục, dán đường dẫn hoặc Browse, Validate (lỗi hiện ngay tại ô) và Build, bảng QA và tải `manifest.json`; giữ nguyên comment trong YAML |
+| Phân phối | Cài bằng một cú nhấp, không cần Docker (`install.bat` / `install.sh`); Docker image `ghcr.io/wosonday/swatprep`; mỗi phiên bản có một GitHub Release |
 
 Ngoài phạm vi: phân định lưu vực, sinh HRU/LSU, `project.sqlite` SWAT+ hoàn chỉnh, hiệu chỉnh và phân
-tích bất định, tự động tải dữ liệu, giao diện đồ họa.
+tích bất định, tự động tải dữ liệu, giao diện đồ họa thay thế QSWAT+ hay SWAT+ Editor (giao diện web
+chỉ soạn và chạy file YAML của công cụ này).
 
 ## Cài đặt
 
-```bash
-pip install -e .[geo,dev]     # đầy đủ: raster, cắt, chiếu lại (rasterio, geopandas, shapely)
-pip install -e .[dev]         # bản nhẹ: cấu hình, QA, khí tượng, dòng chảy
-swatprep --version
-```
+| Đối tượng | Cách cài |
+|---|---|
+| Người dùng Windows (không cần Python hay Docker) | Tải và nhấp đúp [`install.bat`](https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.bat): cài phiên bản mới nhất và tạo biểu tượng **SWATprep** trên Desktop; chạy lại để cập nhật, hoặc `install.bat v0.3.0` để cài một phiên bản cụ thể. Hướng dẫn: [docs/INSTALL.md](docs/INSTALL.md) |
+| Người dùng Linux / macOS | `curl -LO https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.sh && sh install.sh` |
+| Người phát triển | `uv sync --extra geo --extra app --extra dev`, rồi `uv run swatprep --version` và `uv run swatprep-ui` |
+| Docker | `docker run --rm -p 127.0.0.1:8501:8501 -v "<dữ liệu>:/data:ro" -v "<dự án>:/workspace" ghcr.io/wosonday/swatprep:latest` (hoặc tag phiên bản như `:0.3.0`) |
+
+Nhóm tuỳ chọn: `geo` (rasterio, geopandas, shapely: raster, cắt, chiếu lại), `app` (giao diện web
+Streamlit), `dev` (pytest). Không có `geo` vẫn chạy được kiểm tra cấu hình, QA, khí tượng và dòng chảy.
+`pip install -e .[geo,app,dev]` vẫn dùng được; nên dùng uv vì nó cài đúng các phiên bản trong `uv.lock`.
 
 ## Bắt đầu nhanh
+
+### Giao diện web
+
+1. Mở **SWATprep** (biểu tượng trên Desktop, hoặc lệnh `swatprep-ui`); trình duyệt tự mở. App chỉ nhận
+   kết nối từ chính máy này (`localhost`).
+2. Ở trang **Project**, chọn thư mục dự án (dán đường dẫn hoặc **Browse**), rồi mở một config hoặc tạo
+   config mới.
+3. Bật các mục cần dùng (DEM, Land use, Soil, Weather, Streamflow, Clip) và điền các ô; đường dẫn có thể
+   dán hoặc chọn bằng **Browse**.
+4. **Validate**: tệp thiếu và giá trị sai được đánh dấu ngay tại ô. **Build**: xem bảng QA và tải
+   `manifest.json`.
+
+Form đọc và ghi chính file `config.yaml` (giữ comment và thứ tự khoá), nên config tạo trên app vẫn chạy
+được bằng CLI. Đường dẫn được lưu theo cách app nhìn thấy; trong Docker là `/data/...`.
+
+### Dòng lệnh
 
 1. Viết `config.yaml` (lấy [`examples/config_full.yaml`](examples/config_full.yaml) làm gốc).
 2. `swatprep validate config.yaml`: kiểm tra YAML và mọi file đầu vào có tồn tại.
@@ -243,10 +268,17 @@ không hợp lệ được báo thành lỗi QA và mục có lỗi nặng khôn
 ## Phát triển
 
 ```bash
-pytest -q                                   # test raster cần  pip install -e .[geo,dev]
-python -m compileall swatprep tests
-python -m build --sdist --wheel
+uv sync --extra geo --extra app --extra dev
+uv run python -m pytest -q        # test lõi và giao diện web (tests/ui dùng Streamlit AppTest)
+uv run swatprep-ui                # chạy giao diện web từ mã nguồn
+uv build                          # sdist và wheel
 ```
+
+Giao diện web nằm trong `app/` và phụ thuộc một chiều vào lõi: `pages` -> `ui` -> `services` -> `swatprep`.
+`app/services` không import Streamlit và chứa phần logic có test. Mọi trường cấu hình phải có trong
+`app/services/form_layout.py`; test sẽ báo lỗi khi `swatprep/config.py` có trường mới mà form chưa hiển
+thị. CI chạy test cho mọi pull request; tag `vX.Y.Z` phát hành Docker image và GitHub Release
+([docs/RELEASING.md](docs/RELEASING.md)).
 
 Giữ mỗi processor nhỏ và dễ test: nạp một domain, kiểm tra cấu trúc và giả định thủy văn, trả về result
 có `qa: list[QACheck]`, và để writer chỉ ghi dữ liệu đã được kiểm tra. Không biến dự án này thành công

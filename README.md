@@ -2,7 +2,7 @@
 
 `swatprep` is a small Python library and CLI that prepares raw DEM, land-use, soil, weather and
 streamflow inputs for SWAT Classic and SWAT+ workflows. You describe a project once in a YAML file
-and run `swatprep build`.
+and run `swatprep build`, or fill the same YAML in the **web app** (`swatprep-ui`).
 
 It is deliberately a **preprocessor and format writer**. It does not replace QSWAT, QSWAT+,
 SWAT+ Editor, TauDEM, WhiteboxTools, SWAT+ Toolbox, PEST or any calibration workflow.
@@ -10,7 +10,8 @@ SWAT+ Editor, TauDEM, WhiteboxTools, SWAT+ Toolbox, PEST or any calibration work
 Full guides: **[docs/USER_GUIDE_VI.md](docs/USER_GUIDE_VI.md)** (Vietnamese, step by step, every YAML
 option) · [examples/config_full.yaml](examples/config_full.yaml) (annotated template) ·
 [docs/WEATHER_OUTPUT.md](docs/WEATHER_OUTPUT.md) · [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) ·
-[TESTING_GUIDE.md](TESTING_GUIDE.md).
+[TESTING_GUIDE.md](TESTING_GUIDE.md) · [docs/INSTALL.md](docs/INSTALL.md) (team install, Vietnamese) ·
+[docs/RELEASING.md](docs/RELEASING.md) · [CHANGELOG.md](CHANGELOG.md).
 
 ## What it does
 
@@ -22,19 +23,43 @@ option) · [examples/config_full.yaml](examples/config_full.yaml) (annotated tem
 | Streamflow | Long-format CSV validation and per-station output |
 | Quality assurance | Every step returns `pass` / `warn` / `fail` checks; `manifest.json` and `qa_report.md` are written for each build |
 | Converters | Vendor `.day` files, wide streamflow tables, raw station files to CSV / SWAT2012 / SWAT+ |
+| Web app | Streamlit form over the same YAML: open a project folder, switch sections on or off, paste or browse for files, Validate (errors shown on the field) and Build, QA table and `manifest.json` download; comments in the YAML are kept |
+| Distribution | One-click install without Docker (`install.bat` / `install.sh`), Docker image `ghcr.io/wosonday/swatprep`, a GitHub Release per version |
 
 Out of scope: watershed delineation, HRU/LSU generation, a complete SWAT+ `project.sqlite`,
-calibration or uncertainty analysis, automatic data download, a GUI.
+calibration or uncertainty analysis, automatic data download, a GUI that replaces QSWAT+ or SWAT+ Editor
+(the web app only edits and runs this tool's YAML).
 
 ## Install
 
-```bash
-pip install -e .[geo,dev]     # full: rasters, clipping, reprojection (rasterio, geopandas, shapely)
-pip install -e .[dev]         # light: config, QA, weather, streamflow only
-swatprep --version
-```
+| Who | How |
+|---|---|
+| Users on Windows (no Python or Docker needed) | Download and double-click [`install.bat`](https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.bat). It installs the latest release and adds a **SWATprep** shortcut to the Desktop; run it again to update, or `install.bat v0.3.0` for a given version. Guide: [docs/INSTALL.md](docs/INSTALL.md) |
+| Users on Linux / macOS | `curl -LO https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.sh && sh install.sh` |
+| Developers | `uv sync --extra geo --extra app --extra dev`, then `uv run swatprep --version` and `uv run swatprep-ui` |
+| Docker | `docker run --rm -p 127.0.0.1:8501:8501 -v "<data>:/data:ro" -v "<projects>:/workspace" ghcr.io/wosonday/swatprep:latest` (or a version tag such as `:0.3.0`) |
+
+Extras: `geo` (rasterio, geopandas, shapely: rasters, clipping, reprojection), `app` (Streamlit web app),
+`dev` (pytest). Without `geo`, config checks, QA, weather and streamflow still work. `pip install -e .[geo,app,dev]`
+works too; uv is preferred because it installs exactly the versions in `uv.lock`.
 
 ## Quick start
+
+### Web app
+
+1. Start **SWATprep** (Desktop shortcut, or `swatprep-ui`); the browser opens. The app only listens on
+   this computer (`localhost`).
+2. On the **Project** page, set the project folder (paste a path or **Browse**), then open a config or
+   create a new one.
+3. Switch on the sections you need (DEM, Land use, Soil, Weather, Streamflow, Clip) and fill the fields;
+   paths can be pasted or picked with **Browse**.
+4. **Validate**: missing files and invalid values are marked on the fields. **Build**: review the QA
+   table and download `manifest.json`.
+
+The form reads and writes the same `config.yaml` (comments and key order are kept), so a config made in
+the app also runs with the CLI. Paths are saved as the app sees them; in Docker that means `/data/...`.
+
+### Command line
 
 1. Write `config.yaml` (start from [`examples/config_full.yaml`](examples/config_full.yaml)).
 2. `swatprep validate config.yaml`: checks the YAML and that every input file exists.
@@ -246,10 +271,17 @@ with hard failures are not written.
 ## Development
 
 ```bash
-pytest -q                                   # the geospatial tests need  pip install -e .[geo,dev]
-python -m compileall swatprep tests
-python -m build --sdist --wheel
+uv sync --extra geo --extra app --extra dev
+uv run python -m pytest -q        # core and web app tests (tests/ui uses Streamlit AppTest)
+uv run swatprep-ui                # run the web app from source
+uv build                          # sdist and wheel
 ```
+
+The web app lives in `app/` and depends one way on the core: `pages` -> `ui` -> `services` -> `swatprep`.
+`app/services` never imports Streamlit and holds the tested logic. Every config field must be listed in
+`app/services/form_layout.py`; a test fails when `swatprep/config.py` gains a field the form does not show.
+CI tests every pull request; a tag `vX.Y.Z` publishes the Docker image and a GitHub Release
+([docs/RELEASING.md](docs/RELEASING.md)).
 
 Keep each processor narrow and testable: load one domain, validate structure and hydrologic
 assumptions, return a typed result with `qa: list[QACheck]`, and let the writer serialize only
