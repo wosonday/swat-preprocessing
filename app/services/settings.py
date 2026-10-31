@@ -11,12 +11,14 @@ WORKSPACE_VAR = "SWATPREP_WORKSPACE"
 
 @dataclass(frozen=True)
 class Settings:
-    data_root: Path
-    workspace: Path
+    data_root: Path | None  # None: not set (normal for a local install)
+    workspace: Path | None
+
+
+def _path(var: str) -> Path | None:
+    value = os.environ.get(var)
+    return Path(value) if value else None  # an empty variable counts as not set
 
 
 def load_settings() -> Settings:
-    return Settings(
-        data_root=Path(os.environ.get(DATA_ROOT_VAR) or "data"),
-        workspace=Path(os.environ.get(WORKSPACE_VAR) or "workspace"),
-    )
+    return Settings(data_root=_path(DATA_ROOT_VAR), workspace=_path(WORKSPACE_VAR))

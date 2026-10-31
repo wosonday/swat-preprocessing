@@ -38,10 +38,16 @@ app = [
 
 [project.scripts]
 swatprep = "swatprep.cli:main"
+swatprep-ui = "app.launch:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["swatprep*", "app*"]
+
+[tool.setuptools.package-data]
+# Streamlit pages are plain scripts (no __init__.py) and the theme is a TOML file:
+# both must ship inside the package so `swatprep-ui` works after `uv tool install`.
+app = ["pages/*.py", ".streamlit/config.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

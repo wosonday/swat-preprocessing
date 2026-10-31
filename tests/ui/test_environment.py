@@ -31,3 +31,10 @@ def test_unwritable_folder_not_ok(monkeypatch, tmp_path):
     monkeypatch.setattr("app.services.environment.tempfile.TemporaryFile", always_denied)
     c = check_folder("workspace", tmp_path, need_write=True)
     assert not c.ok
+
+def test_unset_folders_are_optional(monkeypatch):
+    monkeypatch.delenv("SWATPREP_DATA_ROOT", raising=False)
+    monkeypatch.delenv("SWATPREP_WORKSPACE", raising=False)
+    folders = {c.name: c for c in get_report().folders}
+    assert folders["data_root"].ok and folders["data_root"].detail == "not set (optional)"
+    assert folders["workspace"].ok
