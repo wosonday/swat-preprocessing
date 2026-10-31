@@ -11,7 +11,13 @@
 Pull Request ──► job "test"  (uv sync --locked + pytest trên ubuntu)
 Push main ─────► job "test" ──pass──► job "image" ──► ghcr.io/wosonday/swatprep:latest
 Push tag vX.Y.Z► job "test" ──pass──► job "image" ──► ghcr.io/wosonday/swatprep:X.Y.Z
+                                                     └─► job "release" ──► GitHub Release vX.Y.Z
+                                                                          (kèm install.bat, install.sh)
 ```
+
+- Installer mặc định cài **GitHub Release mới nhất** (`/releases/latest`); link cố định cho người dùng:
+  `https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.bat`.
+- Mọi Release cũ vẫn giữ trên trang Releases; người dùng quay về bằng `install.bat vX.Y.Z` (từ `v0.3.0` trở đi).
 
 - Workflow: `.github/workflows/ci.yml`.
 - Image chỉ được publish khi job `test` qua (`needs: test`).
@@ -33,14 +39,14 @@ git pull
 git switch -c release/X.Y.Z
 ```
 
-Sửa `version = "X.Y.Z"` trong `pyproject.toml` và dòng `VERSION="vX.Y.Z"` trong `scripts/install.bat`, `scripts/install.sh`, rồi:
+Sửa `version = "X.Y.Z"` trong `pyproject.toml`, rồi:
 
 ```bash
 uv lock
 git diff
 ```
 
-🛑 `git diff` chỉ có 4 thay đổi: `pyproject.toml`, dòng `version` của `swatprep` trong `uv.lock`, và `VERSION` trong hai script cài đặt.
+🛑 `git diff` chỉ có 2 thay đổi: `pyproject.toml` và dòng `version` của `swatprep` trong `uv.lock`.
 
 ```bash
 uv sync --locked --extra geo --extra app --extra dev
@@ -51,7 +57,7 @@ uv run swatprep --version
 🛑 Toàn bộ test qua và `swatprep, version X.Y.Z`.
 
 ```bash
-git add pyproject.toml uv.lock scripts/install.bat scripts/install.sh
+git add pyproject.toml uv.lock
 git commit -m "release: X.Y.Z"
 git push -u origin release/X.Y.Z
 ```
@@ -95,13 +101,15 @@ docker run --rm ghcr.io/wosonday/swatprep:X.Y.Z swatprep --version
 
 🛑 `Downloaded newer image` (digest mới) và `swatprep, version X.Y.Z`.
 
+🛑 Trang **Releases** có `vX.Y.Z`, đánh dấu *Latest*, kèm `install.bat` và `install.sh`.
+
 ---
 
 ## 3. Running the App (người dùng)
 
 ### 3.1. Không cần Docker (khuyến nghị cho nhóm)
 
-Xem `docs/INSTALL.md`: tải `scripts/install.bat` (Windows) hoặc `scripts/install.sh` (Linux/macOS), chạy một lần; sau đó mở bằng biểu tượng *SWATprep*. Chạy lại script để cập nhật lên phiên bản ghi trong script.
+Xem `docs/INSTALL.md`: tải `install.bat` (Windows) hoặc `install.sh` (Linux/macOS) từ Release mới nhất, chạy một lần; sau đó mở bằng biểu tượng *SWATprep*. Chạy lại script để cập nhật lên Release mới nhất; `install.bat vX.Y.Z` để cài một phiên bản cụ thể.
 
 ### 3.2. Bằng Docker image
 
@@ -126,6 +134,7 @@ Người phát triển dùng `uv run swatprep-ui` (hoặc `docker compose up --b
 |---|---|---|
 | Image `X.Y.Z` in ra phiên bản cũ | Tag gắn vào commit **trước khi** PR phát hành được merge | `git rev-parse --short vX.Y.Z` khác commit merge. Xoá tag (`git tag -d vX.Y.Z`, `git push origin --delete vX.Y.Z`) rồi tag lại sau khi merge |
 | `docker pull` báo `Image is up to date` với digest cũ | Pull trước khi CI build xong | Chờ tab Actions ✅; so digest với trang Packages |
+| Installer báo *Could not find the latest release* | Chưa có GitHub Release nào (tag chưa qua job `release`) hoặc mất mạng | Kiểm tra tab Actions của tag; tạm thời dùng `install.bat vX.Y.Z` |
 | `docker pull` báo `denied` | Image chưa tồn tại (CI chưa chạy/thất bại) hoặc package đang Private | Kiểm tra tab Actions và visibility của package |
 | CI/Docker lỗi `--locked` | Sửa `version` trong `pyproject.toml` nhưng chưa `uv lock` | Luôn chạy `uv lock` sau khi sửa `pyproject.toml` |
 | Workflow không chạy | `.gitignore` chặn `.github/` | `git check-ignore -v .github/workflows/ci.yml` phải không in gì |
