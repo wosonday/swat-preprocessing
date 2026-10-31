@@ -4,7 +4,7 @@ All notable changes to swatprep. Versions follow [Semantic Versioning](https://s
 each version has a Git tag `vX.Y.Z`, a Docker image `ghcr.io/wosonday/swatprep:X.Y.Z` and, from 0.3.0,
 a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
-## [Unreleased]
+## [0.6.0] - 2026-10-31
 
 ### Added
 - **Projects** screen on the Project page when no project is open: recent projects (with their number of
