@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 from pydantic import BaseModel
 
@@ -75,15 +76,18 @@ def _mapping(ctx: FormContext, section: dict, spec: FieldSpec, path: str, key: s
         st.session_state[init_key] = [
             {"variable": k, "name": v} for k, v in to_widget(spec, section.get(spec.name)).items()
         ]
-    rows = st.data_editor(
-        st.session_state[init_key], key=key, num_rows="dynamic", width="stretch",
+    # A DataFrame with named columns: an empty list would give a table without columns, with nowhere to type.
+    table = pd.DataFrame(st.session_state[init_key], columns=["variable", "name"])
+    edited = st.data_editor(
+        table, key=key, num_rows="dynamic", width="stretch", hide_index=True,
         column_config={
             "variable": st.column_config.SelectboxColumn(
                 "Variable", options=["precip", "tmax", "tmin", "wind", "solar", "humidity"], required=True),
             "name": st.column_config.TextColumn("Name in file", required=True),
         },
     )
-    value = {r["variable"]: r["name"] for r in rows if r.get("variable") and r.get("name")}
+    value = {v: n.strip() for v, n in zip(edited["variable"], edited["name"])
+             if isinstance(v, str) and v and isinstance(n, str) and n.strip()}   # skip half-filled rows
     st.caption(_label(spec))
     apply(section, spec, value)
 

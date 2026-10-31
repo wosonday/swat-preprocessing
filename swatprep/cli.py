@@ -286,11 +286,11 @@ def convert_streamflow(
 
 @convert.command("weather")
 @click.option("--pcp-master", type=click.Path(exists=True, path_type=Path), default=None,
-              help="Master CSV for precipitation stations (ID,NAME,LAT,LONG,ELEVATION).")
+              help="Master CSV for precipitation stations (ID,NAME,LAT,LONG,ELEV; any case).")
 @click.option("--pcp-dir", type=click.Path(exists=True, path_type=Path), default=None,
               help="Directory containing raw precipitation station files.")
 @click.option("--tmp-master", type=click.Path(exists=True, path_type=Path), default=None,
-              help="Master CSV for temperature stations (ID,NAME,LAT,LONG,ELEVATION).")
+              help="Master CSV for temperature stations (ID,NAME,LAT,LONG,ELEV; any case).")
 @click.option("--tmp-dir", type=click.Path(exists=True, path_type=Path), default=None,
               help="Directory containing raw temperature station files.")
 @click.option("--target", "targets", multiple=True,

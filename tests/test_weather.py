@@ -50,6 +50,41 @@ def test_stations_missing_column_raises(tmp_dir, weather_data_dir):
         WeatherPreprocessor(cfg).run()
 
 
+@pytest.mark.parametrize("header", [
+    "ID,NAME,LAT,LONG,ELEV",              # SWAT master file
+    "id,name,lat,lon,elev",
+    "Id, Name, Lat, Long, Elevation",     # mixed case, spaces after commas
+    "\ufeffID,NAME,LATITUDE,LONGITUDE,ELEV",  # BOM written by Excel
+])
+def test_station_columns_ignore_case_and_accept_aliases(tmp_dir, weather_data_dir, header):
+    master = tmp_dir / "master_pcp.txt"
+    master.write_text(f"{header}\nST001,StationA,15.5,105.2,120\nST002,StationB,15.8,105.6,95\n", encoding="utf-8")
+    stations = WeatherPreprocessor(_make_cfg(master, weather_data_dir)).run().stations
+    assert list(stations.index) == ["ST001", "ST002"]
+    assert list(stations[["name", "lat", "lon", "elev"]].iloc[1]) == ["StationB", 15.8, 105.6, 95.0]
+
+
+def test_station_ids_stay_text(tmp_dir, weather_data_dir):
+    master = tmp_dir / "stations.csv"
+    master.write_text("ID,NAME,LAT,LONG,ELEV\n0012,A,15.5,105.2,120\n", encoding="utf-8")
+    (weather_data_dir / "0012.csv").write_text((weather_data_dir / "ST001.csv").read_text())
+    assert list(WeatherPreprocessor(_make_cfg(master, weather_data_dir)).run().stations.index) == ["0012"]
+
+
+def test_station_coordinates_must_be_numbers(tmp_dir, weather_data_dir):
+    master = tmp_dir / "stations.csv"
+    master.write_text("ID,NAME,LAT,LONG,ELEV\nST001,A,15.5,abc,120\n", encoding="utf-8")
+    with pytest.raises(InputValidationError, match="lon.*not a number"):
+        WeatherPreprocessor(_make_cfg(master, weather_data_dir)).run()
+
+
+def test_missing_column_message_names_the_accepted_headers(tmp_dir, weather_data_dir):
+    bad = tmp_dir / "bad.csv"
+    bad.write_text("ID,NAME,LAT\nST001,A,15.5\n", encoding="utf-8")
+    with pytest.raises(InputValidationError, match="elev, lon.*LONG"):
+        WeatherPreprocessor(_make_cfg(bad, weather_data_dir)).run()
+
+
 # ---------------------------------------------------------------------------
 # Daily data loading
 # ---------------------------------------------------------------------------

@@ -67,6 +67,9 @@ def render_weather(ctx: FormContext) -> None:
             fill = section_at(ctx.cfg, "weather.fill")
             kind = fill.get("type", "csv")
             fill.setdefault(kind, {})
+            for other in ("csv", "netcdf"):
+                if other != kind and not fill.get(other, True):
+                    del fill[other]   # an empty block of the unused type fails validation (its fields are required)
             model = FillCSVConfig if kind == "csv" else FillNetCDFConfig
             st.markdown(f"**{'CSV stations' if kind == 'csv' else 'NetCDF grid'}**")
             render_model(ctx, model, f"weather.fill.{kind}")

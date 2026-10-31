@@ -117,25 +117,35 @@ class StationWeatherConverter:
     def _read_master(self, path: Path, prefix: str, label: str, qa: list[QACheck]) -> pd.DataFrame:
         if not path.exists():
             raise InputValidationError(f"master file not found: {path}")
-        df = pd.read_csv(path, dtype={self.id_col: str})
-        required = {self.name_col, self.lat_col, self.lon_col, self.elev_col, self.id_col}
-        missing = required - set(df.columns)
+        from ..core.weather import station_column
+
+        # headers match without case; LONG/LONGITUDE, LATITUDE and ELEVATION are read as lon, lat and elev
+        df = pd.read_csv(path, dtype=str, encoding="utf-8-sig", skipinitialspace=True)
+        df.columns = [station_column(c) for c in df.columns]
+        col = {role: station_column(getattr(self, f"{role}_col")) for role in ("id", "name", "lat", "lon", "elev")}
+        missing = set(col.values()) - set(df.columns)
         if missing:
             raise InputValidationError(
-                f"master file ({label}) missing columns: {sorted(missing)}. Found: {list(df.columns)}"
+                f"master file ({label}) missing columns: {sorted(missing)}. Found: {list(df.columns)}. "
+                "Headers may be in any case, e.g. ID,NAME,LAT,LONG,ELEV."
             )
 
         records = []
         for _, row in df.iterrows():
-            full_name = str(row[self.name_col]).strip()
+            full_name = str(row[col["name"]]).strip()
             code = full_name[len(prefix):] if full_name.startswith(prefix) else full_name
-            records.append({
-                "id": str(row[self.id_col]).strip(),
-                "name": code,
-                "lat": float(row[self.lat_col]),
-                "lon": float(row[self.lon_col]),
-                "elev": float(row[self.elev_col]),
-            })
+            try:
+                records.append({
+                    "id": str(row[col["id"]]).strip(),
+                    "name": code,
+                    "lat": float(row[col["lat"]]),
+                    "lon": float(row[col["lon"]]),
+                    "elev": float(row[col["elev"]]),
+                })
+            except (TypeError, ValueError) as exc:
+                raise InputValidationError(
+                    f"master file ({label}): lat, lon and elev must be numbers (station {full_name}): {exc}"
+                ) from exc
         out = pd.DataFrame.from_records(records).set_index("id")
 
         qa.append(QACheck(

@@ -63,7 +63,9 @@ def test_weather_fill_block_follows_type(page):
     fill = page.session_state["cfg"]["weather"]["fill"]
     assert "csv" in fill
     page.selectbox(key="f::weather.fill.type").select("netcdf").run()
-    assert "netcdf" in page.session_state["cfg"]["weather"]["fill"]
+    fill = page.session_state["cfg"]["weather"]["fill"]
+    assert "netcdf" in fill
+    assert "csv" not in fill        # an empty block of the other type would fail validation (csv: {} needs fields)
 
 
 def test_validate_marks_missing_file_on_the_field(page, example_project):
@@ -141,3 +143,26 @@ def test_variable_map_edits_survive_explore(monkeypatch, example_project, open_p
     assert at.session_state["cfg"]["weather"]["fill"]["netcdf"]["var_map"] == {
         "precip": "pr", "tmax": "tasmax", "tmin": "tasmin"}
     assert any(c.value == "Variable map *" for c in at.caption)
+
+
+def test_empty_block_of_the_unused_fill_type_is_dropped(monkeypatch, example_project, open_project):
+    block = NETCDF_FILL.replace("  fill:\n", "  fill:\n    csv: {}\n")
+    text = example_project.read_text(encoding="utf-8").replace("streamflow:", block + "streamflow:", 1)
+    example_project.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
+    at = open_project(AppTest.from_file(PAGE, default_timeout=60).run(), example_project.parent)
+    assert "csv" not in at.session_state["cfg"]["weather"]["fill"]
+    at.button(key="validate").click().run()
+    assert not any(k.startswith("weather.fill.csv") for k in at.session_state.get("file_errors", {}))
+    _, _, result = at.session_state["last_run"]
+    assert "weather.fill.csv" not in (result.error or "")
+
+
+def test_empty_variable_map_still_has_its_columns(monkeypatch, example_project, open_project):
+    block = NETCDF_FILL.replace("      var_map: { precip: pr, tmax: tasmax }\n", "")
+    text = example_project.read_text(encoding="utf-8").replace("streamflow:", block + "streamflow:", 1)
+    example_project.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
+    at = open_project(AppTest.from_file(PAGE, default_timeout=60).run(), example_project.parent)
+    table = next(e.value for e in at.get("dataframe") if e.key == "f::weather.fill.netcdf.var_map")
+    assert list(table.columns) == ["variable", "name"] and table.empty

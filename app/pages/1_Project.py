@@ -18,6 +18,7 @@ from app.ui.project_sidebar import new_config_dialog, render_config_picker, rend
 from app.ui.projects_home import render_home
 from app.ui.results import render_result
 from app.ui.sections import render_project, render_section
+from app.ui.tabs import stable_tabs
 
 ALL = "All configured"
 
@@ -148,7 +149,7 @@ mode = st.segmented_control("Mode", ["Configure", "Explore"], default="Configure
                             label_visibility="collapsed")
 if mode == "Configure":
     labels = [_tab_label("project", "Project")] + [_tab_label(k, SECTIONS[k][0]) for k in configured] + ["YAML"]
-    tabs = st.tabs(labels)
+    tabs = stable_tabs(["project", *configured, "yaml"], labels, key="form_tabs")
     with tabs[0]:
         render_project(ctx)
     for key, tab in zip(configured, tabs[1:-1]):
