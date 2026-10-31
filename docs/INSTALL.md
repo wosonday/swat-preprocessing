@@ -1,0 +1,36 @@
+# Cài đặt SWATprep (không cần Docker)
+
+Dành cho người dùng trong nhóm. Chỉ cần làm **một lần**; sau đó mở app bằng biểu tượng trên Desktop.
+
+## Windows
+
+1. Tải tệp **`install.bat`** từ trang Releases của dự án (`https://github.com/wosonday/swat-preprocessing/releases`), mục *Assets*, hoặc từ thư mục `scripts/` của repository.
+2. Nhấp đúp `install.bat`. Nếu Windows hiện cảnh báo SmartScreen, chọn **More info → Run anyway**.
+3. Chờ cửa sổ đen báo **Done** (lần đầu có thể mất vài phút vì phải tải Python và thư viện), rồi nhấn phím bất kỳ.
+4. Trên Desktop xuất hiện biểu tượng **SWATprep**.
+
+**Mỗi lần dùng:** nhấp đúp **SWATprep** → trình duyệt tự mở trang app. Để tắt app, đóng cửa sổ đen.
+
+**Cập nhật:** tải `install.bat` của phiên bản mới và chạy lại.
+
+## Linux / macOS
+
+```sh
+sh install.sh
+```
+
+Sau đó mở bằng mục **SWATprep** trong menu ứng dụng (Linux), hoặc chạy lệnh in ra ở cuối.
+
+## Dùng app
+
+1. Mở trang **Project**.
+2. Ở **Project folder**, dán đường dẫn thư mục dự án (ví dụ `D:\SWAT-model\projects\MaDa`) hoặc bấm **Browse** → chọn thư mục → **Use this folder**.
+3. Chọn config ở **Open config**, hoặc tạo mới ở **New config**.
+4. Bấm **Validate**, sửa các ô báo đỏ nếu có, rồi bấm **Build**.
+
+## Khi gặp lỗi
+
+- Trang **Home** liệt kê phiên bản và các driver GDAL; chụp màn hình trang này khi báo lỗi.
+- Cài đặt thất bại: chụp màn hình cửa sổ đen gửi người quản lý SWATprep.
+- Mở app hai lần: bản thứ hai tự chạy ở cổng 8502, 8503… Nên đóng cửa sổ đen cũ và chỉ giữ một bản.
+- App chỉ mở được từ chính máy đang chạy nó (`localhost`); máy khác trong mạng không truy cập được.

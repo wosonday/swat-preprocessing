@@ -45,3 +45,13 @@ orangeColor = "#ffc740"                # amber
 codeBackgroundColor = "#18181b"        # code-body-bg
 codeTextColor = "#bdbdbd"              # text-muted
 dataframeHeaderBackgroundColor = "#494949"  # bg-subtle
+
+[browser]
+gatherUsageStats = false   # internal team tool: no usage statistics
+
+[client]
+toolbarMode = "minimal"    # hide developer menu items (Deploy, rerun) from users
+
+[server]
+address = "localhost"      # a local install is reachable only from this computer;
+                           # Docker overrides this with --server.address=0.0.0.0

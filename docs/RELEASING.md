@@ -33,14 +33,14 @@ git pull
 git switch -c release/X.Y.Z
 ```
 
-Sửa `version = "X.Y.Z"` trong `pyproject.toml`, rồi:
+Sửa `version = "X.Y.Z"` trong `pyproject.toml` và dòng `VERSION="vX.Y.Z"` trong `scripts/install.bat`, `scripts/install.sh`, rồi:
 
 ```bash
 uv lock
 git diff
 ```
 
-🛑 `git diff` chỉ có 2 thay đổi: `pyproject.toml` và dòng `version` của `swatprep` trong `uv.lock`.
+🛑 `git diff` chỉ có 4 thay đổi: `pyproject.toml`, dòng `version` của `swatprep` trong `uv.lock`, và `VERSION` trong hai script cài đặt.
 
 ```bash
 uv sync --locked --extra geo --extra app --extra dev
@@ -51,7 +51,7 @@ uv run swatprep --version
 🛑 Toàn bộ test qua và `swatprep, version X.Y.Z`.
 
 ```bash
-git add pyproject.toml uv.lock
+git add pyproject.toml uv.lock scripts/install.bat scripts/install.sh
 git commit -m "release: X.Y.Z"
 git push -u origin release/X.Y.Z
 ```
@@ -97,7 +97,13 @@ docker run --rm ghcr.io/wosonday/swatprep:X.Y.Z swatprep --version
 
 ---
 
-## 3. Running the Image (người dùng)
+## 3. Running the App (người dùng)
+
+### 3.1. Không cần Docker (khuyến nghị cho nhóm)
+
+Xem `docs/INSTALL.md`: tải `scripts/install.bat` (Windows) hoặc `scripts/install.sh` (Linux/macOS), chạy một lần; sau đó mở bằng biểu tượng *SWATprep*. Chạy lại script để cập nhật lên phiên bản ghi trong script.
+
+### 3.2. Bằng Docker image
 
 Image có sẵn `SWATPREP_DATA_ROOT=/data` và `SWATPREP_WORKSPACE=/workspace`.
 
@@ -110,7 +116,7 @@ docker run --rm -p 127.0.0.1:8501:8501 \
 
 Mở `http://localhost:8501`. Đổi cổng máy bằng số bên trái của `-p` (ví dụ `127.0.0.1:8080:8501`).
 
-Người phát triển dùng `docker compose up --build` (đường dẫn và cổng lấy từ `.env`, mẫu ở `.env.example`).
+Người phát triển dùng `uv run swatprep-ui` (hoặc `docker compose up --build` để kiểm tra image) (đường dẫn và cổng lấy từ `.env`, mẫu ở `.env.example`).
 
 ---
 

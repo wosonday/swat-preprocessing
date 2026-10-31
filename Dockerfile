@@ -24,11 +24,9 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 swat
 WORKDIR /app
 COPY --from=builder --chown=swat:swat /app/.venv /app/.venv
-COPY --chown=swat:swat app ./app
-COPY --chown=swat:swat .streamlit ./.streamlit
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 \
     SWATPREP_DATA_ROOT=/data SWATPREP_WORKSPACE=/workspace
 USER swat
 EXPOSE 8501
 HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"
-CMD ["streamlit", "run", "app/Home.py", "--server.address=0.0.0.0"]
+CMD ["swatprep-ui", "--server.address=0.0.0.0", "--server.headless=true"]

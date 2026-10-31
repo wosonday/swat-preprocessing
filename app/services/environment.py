@@ -82,6 +82,13 @@ def _pyogrio_drivers():  # geopandas read shapefile/GPKG via pyogrio
     return pyogrio.list_drivers()
 
 
+def _optional_folder(name: str, path: Path | None, need_write: bool) -> Check:
+    """Folders come from environment variables; a local install does not set them."""
+    if path is None:
+        return Check(name, True, "not set (optional)")
+    return check_folder(name, path, need_write)
+
+
 def get_report(settings: Settings | None = None) -> EnvironmentReport:
     s = settings or load_settings()
     return EnvironmentReport(
@@ -90,7 +97,7 @@ def get_report(settings: Settings | None = None) -> EnvironmentReport:
         drivers=_driver_checks(RASTER_DRIVERS, _rasterio_drivers)
         + _driver_checks(VECTOR_DRIVERS, _pyogrio_drivers),
         folders=[
-            check_folder("data_root", s.data_root, need_write=False),
-            check_folder("workspace", s.workspace, need_write=True),
+            _optional_folder("data_root", s.data_root, need_write=False),
+            _optional_folder("workspace", s.workspace, need_write=True),
         ],
     )
