@@ -8,11 +8,10 @@ PAGE = str(Path(__file__).resolve().parents[2] / "app" / "pages" / "1_Project.py
 
 
 @pytest.fixture
-def page(monkeypatch, example_project):
+def page(monkeypatch, example_project, open_project):
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
     at = AppTest.from_file(PAGE, default_timeout=60).run()
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
-    return at
+    return open_project(at, example_project.parent)
 
 
 def explore(at, view="Streamflow"):
@@ -77,11 +76,10 @@ def test_map_shows_built_layers(page, example_project):
 
 
 @pytest.fixture
-def filled_page(monkeypatch, filled_project):
+def filled_page(monkeypatch, filled_project, open_project):
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(filled_project.parent))
     at = AppTest.from_file(PAGE, default_timeout=60).run()
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
-    return at
+    return open_project(at, filled_project.parent)
 
 
 def test_weather_view_with_filled_data(filled_page):

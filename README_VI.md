@@ -51,8 +51,9 @@ Streamlit), `dev` (pytest). Không có `geo` vẫn chạy được kiểm tra c�
 
 1. Mở **SWATprep** (biểu tượng trên Desktop, hoặc lệnh `swatprep-ui`); trình duyệt tự mở. App chỉ nhận
    kết nối từ chính máy này (`localhost`).
-2. Ở trang **Project**, chọn thư mục dự án (dán đường dẫn hoặc **Browse**), rồi mở một config hoặc tạo
-   config mới.
+2. Ở trang **Project**, màn hình **Projects** liệt kê các dự án gần đây; mở một thư mục dự án hoặc tạo dự
+   án mới (thư mục và `config.yaml` đầu tiên). Config của dự án là các file `.yaml` trong thư mục đó: chọn ở
+   thanh bên hoặc thêm bằng **New config**.
 3. Bật các mục cần dùng (DEM, Land use, Soil, Weather, Streamflow, Clip) và điền các ô; đường dẫn có thể
    dán hoặc chọn bằng **Browse**.
 4. **Validate**: tệp thiếu và giá trị sai được đánh dấu ngay tại ô. **Build**: xem bảng QA và tải

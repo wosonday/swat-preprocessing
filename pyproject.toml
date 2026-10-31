@@ -39,6 +39,7 @@ app = [
 [project.scripts]
 swatprep = "swatprep.cli:main"
 swatprep-ui = "app.launch:main"
+app = "app.launch:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

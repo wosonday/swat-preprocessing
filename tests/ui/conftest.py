@@ -13,6 +13,17 @@ def isolated_history(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture
+def open_project():
+    """Open a project folder from the Projects screen of an AppTest page."""
+    def _open(at, folder: Path):
+        at.text_input(key="home_open_dir").set_value(str(folder))
+        at.button(key="home_open").click().run()
+        assert not at.exception
+        return at
+    return _open
+
+
+@pytest.fixture
 def example_project(tmp_path: Path) -> Path:
     """A copy of examples/config_minimal.yaml + examples/data in tmp_path; returns the config path."""
     shutil.copytree(EXAMPLES / "data", tmp_path / "data")

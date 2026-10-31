@@ -7,8 +7,6 @@ from pathlib import Path
 from ruamel.yaml import YAML
 from ruamel.yaml.error import MarkedYAMLError
 
-YAML_PATTERNS = ("*.yaml", "*.yml", "*/*.yaml", "*/*.yml", "*/*/*.yaml", "*/*/*.yml")
-
 
 class ConfigFileError(Exception):
     """A config file could not be read; line/column are 1-based when known."""
@@ -50,12 +48,3 @@ def save_yaml(data: dict, path: Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dump_yaml(data), encoding="utf-8")
-
-
-def list_configs(workspace: Path) -> list[Path]:
-    """YAML files up to three folders deep in the workspace, sorted."""
-    workspace = Path(workspace)
-    if not workspace.is_dir():
-        return []
-    found = {p for pattern in YAML_PATTERNS for p in workspace.glob(pattern) if p.is_file()}
-    return sorted(found, key=lambda p: str(p).lower())

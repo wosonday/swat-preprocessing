@@ -29,8 +29,11 @@ Sau đó mở bằng mục **SWATprep** trong menu ứng dụng (Linux), hoặc 
 ## Dùng app
 
 1. Mở trang **Project**.
-2. Ở **Project folder**, dán đường dẫn thư mục dự án (ví dụ `D:\SWAT-model\projects\MaDa`) hoặc bấm **Browse** → chọn thư mục → **Use this folder**.
-3. Chọn config ở **Open config**, hoặc tạo mới ở **New config**.
+2. Màn hình **Projects** hiện ra:
+   - **Recent projects**: bấm **Open** cạnh dự án đã dùng gần đây.
+   - **Open project folder**: dán đường dẫn thư mục dự án (ví dụ `D:\SWAT-model\projects\MaDa`) hoặc **Browse** → **Open**.
+   - **New project**: nhập thư mục mới, tên dự án, CRS → **Create** (app tạo thư mục và `config.yaml`).
+3. Config của dự án là các file `.yaml` ngay trong thư mục dự án. Chọn config ở thanh bên (mục **Config**), hoặc bấm **New config** để thêm một config (chỉ nhập tên file). **Change project** quay về màn hình Projects.
 4. Bấm **Validate**, sửa các ô báo đỏ nếu có, rồi bấm **Build**.
 
 ## Khi gặp lỗi

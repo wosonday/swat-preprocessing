@@ -13,19 +13,19 @@ def test_home_renders(monkeypatch, tmp_path):
     assert at.title[0].value == "swatprep"
 
 
-def test_project_page_without_config_shows_hint(monkeypatch, tmp_path):
+def test_project_page_starts_on_the_projects_screen(monkeypatch, tmp_path):
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(tmp_path))
     at = AppTest.from_file(str(APP / "pages" / "1_Project.py"), default_timeout=30).run()
     assert not at.exception
-    assert "Open a config" in at.info[0].value
+    assert at.title[0].value == "Projects"
+    assert at.text_input(key="home_open_dir").value == str(tmp_path)
 
 
-def test_project_page_validate_and_build(monkeypatch, example_project):
+def test_project_page_validate_and_build(monkeypatch, example_project, open_project):
     monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
     monkeypatch.setenv("SWATPREP_DATA_ROOT", str(example_project.parent / "data"))
     at = AppTest.from_file(str(APP / "pages" / "1_Project.py"), default_timeout=60).run()
-    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
-    assert at.text_input(key="config_path").value == str(example_project)
+    open_project(at, example_project.parent)
 
     at.button(key="validate").click().run()
     assert not at.exception
