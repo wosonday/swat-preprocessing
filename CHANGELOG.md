@@ -4,7 +4,7 @@ All notable changes to swatprep. Versions follow [Semantic Versioning](https://s
 each version has a Git tag `vX.Y.Z`, a Docker image `ghcr.io/wosonday/swatprep:X.Y.Z` and, from 0.3.0,
 a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
-## [Unreleased]
+## [0.6.0] - 2026-10-31
 
 ### Added
 - **Projects** screen on the Project page when no project is open: recent projects (with their number of
@@ -13,6 +13,11 @@ a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
   (a free name such as `config_2.yaml` is suggested, the CRS of the open config is offered).
 
 ### Changed
+- Station tables (`weather.stations`, `weather.precip/temp.stations`, `fill.csv.stations` and the master
+  files of `swatprep convert`) are read without regard to case or spaces in the header, so both
+  `id,name,lat,lon,elev` and the SWAT master layout `ID,NAME,LAT,LONG,ELEV` work; `LONGITUDE`,
+  `LATITUDE` and `ELEVATION` are accepted too. Station ids stay text (`0012` keeps its zeros), and a
+  non-numeric lat / lon / elev is reported with the station id.
 - A project is a folder and its configs are the `.yaml` / `.yml` files at its root; the sidebar shows the
   project, **Change project** and the list of its configs.
 - With unsaved changes, switching config or project is locked until you Save or Discard (it used to
@@ -23,6 +28,13 @@ a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
   config anywhere; configs are no longer searched three folders deep.
 
 ### Fixed
+- The form jumped back to the **Project** tab whenever a tab's error count changed (for example after
+  Validate, or when fixing a field); the selected tab is now kept.
+- An empty **Variable map** table had no columns, so nothing could be typed into it; it now always shows
+  the *Variable* and *Name in file* columns, and half-filled rows are ignored until both cells are set.
+- Switching **Fill → Type** left an empty block of the other type in the YAML (for example `csv: {}` with
+  `type: netcdf`), which failed validation with errors on fields the form did not show. The empty block of
+  the unused type is now removed, also when an existing config is opened.
 - Edits in the **Variable map** table of `weather.fill.netcdf` were lost, and the old rows written back,
   after the table was hidden for a run: switching to Explore, switching the fill type, or turning gap
   filling off and on. The table is now rebuilt from the config in that case.

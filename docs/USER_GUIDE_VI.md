@@ -231,7 +231,7 @@ Mã `0` trong raster HWSD thường là **nước/không có dữ liệu**. Nế
 
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `stations` | đường dẫn | (xem dưới) | CSV trạm: `id, name, lat, lon, elev` |
+| `stations` | đường dẫn | (xem dưới) | CSV trạm: `id, name, lat, lon, elev`. Tên cột không phân biệt hoa/thường; nhận cả kiểu master file SWAT `ID,NAME,LAT,LONG,ELEV` (hoặc `ELEVATION`, `LATITUDE`, `LONGITUDE`); đuôi `.txt` cũng được nếu nội dung là CSV |
 | `data_dir` | đường dẫn | (xem dưới) | Thư mục chứa mỗi trạm một CSV |
 | `file_pattern` | chuỗi | `{id}.csv` | Quy ước đặt tên file; dùng `{name}.csv` để khớp theo tên trạm |
 | `format` | `csv` | `csv` | Định dạng đầu vào (hiện chỉ có CSV) |

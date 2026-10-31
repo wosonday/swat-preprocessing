@@ -21,6 +21,39 @@ from ._wgn import (
 )
 
 _REQUIRED_STATION_COLS = {"id", "name", "lat", "lon", "elev"}
+# Station headers are matched without case or surrounding spaces; these names are read as the column on the right
+# (ID,NAME,LAT,LONG,ELEVATION is the SWAT master-file layout).
+_STATION_ALIASES = {"long": "lon", "longitude": "lon", "latitude": "lat", "elevation": "elev"}
+
+
+def station_column(name: str) -> str:
+    """Header as read for a station table: no case, no surrounding spaces, aliases applied."""
+    key = name.strip().lower()
+    return _STATION_ALIASES.get(key, key)
+
+
+def read_stations(path: Path, label: str = "") -> pd.DataFrame:
+    """Read a station table (id, name, lat, lon, elev in any case; LONG / ELEVATION accepted), indexed by id."""
+    tag = f" ({label})" if label else ""
+    df = pd.read_csv(path, dtype=str, encoding="utf-8-sig", skipinitialspace=True)
+    df.columns = [station_column(c) for c in df.columns]
+    missing_cols = _REQUIRED_STATION_COLS - set(df.columns)
+    if missing_cols:
+        raise InputValidationError(
+            f"stations.csv{tag} missing required columns: {', '.join(sorted(missing_cols))} "
+            f"(found: {', '.join(df.columns)}). Headers may be in any case, e.g. id,name,lat,lon,elev "
+            "or ID,NAME,LAT,LONG,ELEV."
+        )
+    for col in ("id", "name"):
+        df[col] = df[col].str.strip()
+    for col in ("lat", "lon", "elev"):
+        values = pd.to_numeric(df[col].str.strip(), errors="coerce")
+        bad = df.loc[values.isna() & df[col].notna(), "id"].tolist()
+        if bad:
+            raise InputValidationError(
+                f"stations.csv{tag}: {col} is not a number for station(s) {', '.join(bad[:5])}")
+        df[col] = values
+    return df
 _WET_THRESHOLD = 0.1  # mm; day is "wet" if precip >= this value
 
 
@@ -151,13 +184,7 @@ class WeatherPreprocessor:
         self, path: Path, qa: list[QACheck], label: str = "",
     ) -> pd.DataFrame:
         tag = f" ({label})" if label else ""
-        df = pd.read_csv(path, dtype={"id": str})
-        missing_cols = _REQUIRED_STATION_COLS - set(df.columns)
-        if missing_cols:
-            raise InputValidationError(
-                f"stations.csv{tag} missing required columns: "
-                f"{', '.join(sorted(missing_cols))}"
-            )
+        df = read_stations(path, label)
         qa.append(QACheck(
             name=f"stations_loaded{('_' + label) if label else ''}",
             status="pass",

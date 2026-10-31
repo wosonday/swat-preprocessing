@@ -190,3 +190,19 @@ class TestStationWeatherConverterRoundTrip:
         assert list(result2.daily["precip"]["2"]) == [0.0, 0.0, 2.1]
         assert result2.stations.loc["1", "name"] == "ALPHA"
         assert result2.stations.loc["2", "name"] == "BETA"
+
+
+class TestMasterHeaders:
+    @pytest.mark.parametrize("header", ["ID,NAME,LAT,LONG,ELEV", "id,name,lat,lon,elev",
+                                        "Id, Name, Lat, Long, Elevation"])
+    def test_master_headers_ignore_case_and_accept_aliases(self, tmp_path, header):
+        from swatprep.converters.station_weather import StationWeatherConverter
+
+        master = tmp_path / "master_pcp.txt"
+        master.write_text(f"{header}\n1,pcp_ALPHA,13.95,108.65,416\n", encoding="utf-8")
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        _write_swat_pcp(raw_dir / "pcp_ALPHA.txt", "1990-01-01", [0.0, 0.3])
+        result = StationWeatherConverter(pcp_master=master, pcp_dir=raw_dir).convert()
+        assert result.stations.loc["1", "name"] == "ALPHA"
+        assert result.stations.loc["1", ["lat", "lon", "elev"]].tolist() == [13.95, 108.65, 416.0]
