@@ -31,6 +31,7 @@ fi
 echo "Installing SWATprep ${VERSION}. This can take a few minutes the first time..."
 uv tool install --python 3.12 --force "$SWATPREP_SOURCE"
 BIN="$(uv tool dir --bin)"
+ICON="$(ls "$(uv tool dir)"/swatprep/lib/python3*/site-packages/app/assets/icon_512.png 2>/dev/null | head -n 1)"
 
 if [ "$(uname)" = "Linux" ]; then
     APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
@@ -41,6 +42,7 @@ Type=Application
 Name=SWATprep
 Comment=SWATprep web app
 Exec=$BIN/swatprep-ui
+Icon=${ICON:-utilities-terminal}
 Terminal=true
 Categories=Science;
 DESKTOP

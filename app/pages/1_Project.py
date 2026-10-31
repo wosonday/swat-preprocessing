@@ -11,14 +11,16 @@ from app.services.form_state import count_for, file_errors, new_config, schema_e
 from app.services.recent import add_recent, load_recent
 from app.services.runner import RunResult
 from app.services.settings import load_settings
+from app.ui.branding import setup_page
 from app.ui.browse import browse_dialog
+from app.ui.explore import render_explore
 from app.ui.fields import FormContext, reset_form_state, toggle_part
 from app.ui.results import render_result
 from app.ui.sections import render_project, render_section
 
 ALL = "All configured"
 
-st.set_page_config(page_title="Project · swatprep", layout="wide")
+setup_page("Project · swatprep")
 settings = load_settings()
 state = st.session_state
 
@@ -174,22 +176,26 @@ errors = {**schema_errors(cfg), **state.get("file_errors", {})} if state.get("er
 ctx.errors = errors
 
 
-# ---------------------------------------------------------------- form tabs
+# ---------------------------------------------------------------- configure (form tabs) or explore
 def _tab_label(key: str, label: str) -> str:
     n = count_for(errors, key)
     return f"{label} ({n})" if n else label
 
 
-keys = ["project", *configured]
-labels = [_tab_label("project", "Project")] + [_tab_label(k, SECTIONS[k][0]) for k in configured] + ["YAML"]
-tabs = st.tabs(labels)
-with tabs[0]:
-    render_project(ctx)
-for key, tab in zip(configured, tabs[1:-1]):
-    with tab:
-        render_section(ctx, key)
-with tabs[-1]:
-    st.code(project_io.dump_yaml(cfg), language="yaml")
+mode = st.segmented_control("Mode", ["Configure", "Explore"], default="Configure", required=True, key="mode",
+                            label_visibility="collapsed")
+if mode == "Configure":
+    labels = [_tab_label("project", "Project")] + [_tab_label(k, SECTIONS[k][0]) for k in configured] + ["YAML"]
+    tabs = st.tabs(labels)
+    with tabs[0]:
+        render_project(ctx)
+    for key, tab in zip(configured, tabs[1:-1]):
+        with tab:
+            render_section(ctx, key)
+    with tabs[-1]:
+        st.code(project_io.dump_yaml(cfg), language="yaml")
+else:
+    render_explore(path, unsaved=project_io.dump_yaml(cfg) != state["clean_yaml"])
 
 # ---------------------------------------------------------------- sidebar: save (after the form, so it sees every edit)
 with st.sidebar:
@@ -207,6 +213,6 @@ with st.sidebar:
                        on_click=_discard)
 
 last = state.get("last_run")
-if last and last[0] == str(path):
+if mode == "Configure" and last and last[0] == str(path):
     st.divider()
     render_result(last[1], last[2])

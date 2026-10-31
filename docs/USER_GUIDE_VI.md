@@ -653,6 +653,25 @@ Ba biến `slr_ave`, `dew_ave`, `wnd_ave` (và `pcp_hhr`) là `-99` khi không c
 Cách đọc nhanh: mở `qa_report.md`, tìm các dòng `fail` trước, sau đó `warn`. Mỗi kiểm tra có tên (vd
 `soil_unmatched_codes`) khớp với bảng ở mục 5.3 và 10.
 
+### 7.1 Xem dữ liệu trên giao diện web (Explore)
+
+Trên trang **Project**, chọn **Explore** (cạnh **Configure**) để xem biểu đồ của dữ liệu mà config
+**đã lưu** trỏ tới; nếu form còn thay đổi chưa lưu, app nhắc lưu trước. **Reload data** đọc lại dữ liệu
+khi file đầu vào vừa được sửa bên ngoài app.
+
+**Streamflow** (cần mục `streamflow`):
+
+| Thành phần | Ý nghĩa |
+|---|---|
+| Bảng tổng quan | Mỗi trạm: giai đoạn, % ngày thiếu, min/trung bình/max, Q5/Q50/Q95 |
+| Hydrograph | Lưu lượng theo ngày; vạch đỏ là ngày thiếu; **Log scale** để xem dòng kiệt; kéo để phóng to |
+| Đường duy trì lưu lượng | % thời gian lưu lượng bị vượt (vị trí vẽ Weibull m/(n+1)); Q5 là dòng lũ, Q95 là dòng kiệt |
+| Khí hậu tháng | Trung bình của các tháng hợp lệ; nhãn *năm hợp lệ/số năm* |
+
+Tháng hợp lệ theo WMO-No. 1203 (2017): với `units: m3s` (trung bình tháng), thiếu tối đa 10 ngày và
+không quá 4 ngày liên tiếp; với `units: mm` (tổng tháng), không thiếu ngày nào. Tháng có số năm hợp lệ
+dưới 80% được vẽ nhạt và có cảnh báo: giá trị trung bình của tháng đó chưa đáng tin.
+
 ---
 
 ## 8. Lệnh dòng lệnh (CLI)

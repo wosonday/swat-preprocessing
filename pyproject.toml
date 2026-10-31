@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swatprep"
-version = "0.3.1"
+version = "0.4.0"
 description = "Preprocess raw geospatial and hydro-meteorological data for SWAT/SWAT+ workflows"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -45,9 +45,9 @@ where = ["."]
 include = ["swatprep*", "app*"]
 
 [tool.setuptools.package-data]
-# Streamlit pages are plain scripts (no __init__.py) and the theme is a TOML file:
+# Streamlit pages are plain scripts (no __init__.py); the theme and icons are data files:
 # both must ship inside the package so `swatprep-ui` works after `uv tool install`.
-app = ["pages/*.py", ".streamlit/config.toml"]
+app = ["pages/*.py", ".streamlit/config.toml", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

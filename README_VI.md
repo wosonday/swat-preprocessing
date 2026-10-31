@@ -1,3 +1,5 @@
+<img src="app/assets/icon.svg" width="72" alt="" align="right">
+
 # swatprep
 
 `swatprep` là thư viện Python kèm CLI để chuẩn bị dữ liệu DEM, sử dụng đất, thổ nhưỡng, khí tượng và

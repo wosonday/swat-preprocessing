@@ -49,3 +49,14 @@ def test_wheel_ships_pages_and_theme(tmp_path):
     assert "app/pages/1_Project.py" in names
     assert "app/.streamlit/config.toml" in names
     assert "app/Home.py" in names
+    assert {"app/assets/icon.png", "app/assets/icon.ico", "app/assets/icon_512.png"} <= names
+
+
+def test_icons_exist_with_windows_sizes():
+    from PIL import Image
+
+    from app.ui.branding import ICON_ICO, ICON_PNG
+
+    assert ICON_PNG.is_file() and (ICON_PNG.parent / "icon.svg").is_file()
+    sizes = set(Image.open(ICON_ICO).info["sizes"])
+    assert {(16, 16), (32, 32), (48, 48), (256, 256)} <= sizes
