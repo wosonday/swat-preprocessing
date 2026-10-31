@@ -4,6 +4,17 @@ All notable changes to swatprep. Versions follow [Semantic Versioning](https://s
 each version has a Git tag `vX.Y.Z`, a Docker image `ghcr.io/wosonday/swatprep:X.Y.Z` and, from 0.3.0,
 a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
+## [0.4.0] - 2026-10-31
+
+### Added
+- **Explore** on the Project page (switch **Configure | Explore**): charts of the data behind the saved
+  config. First view, **Streamflow**: per-station summary (period, % missing, min/mean/max, Q5/Q50/Q95),
+  hydrograph with log scale and missing days in red, flow duration curve (Weibull plotting position) and
+  monthly climatology that applies the WMO-No. 1203 completeness rules and flags months valid in fewer
+  than 80% of the years.
+- App icon (a river network converging on its outlet): browser tab, sidebar logo, Windows Desktop
+  shortcut (`icon.ico`, 16-256 px) and Linux application menu; source in `app/assets/icon.svg`.
+
 ## [0.3.1] - 2026-10-31
 
 ### Changed

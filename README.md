@@ -1,3 +1,5 @@
+<img src="app/assets/icon.svg" width="72" alt="" align="right">
+
 # swatprep
 
 `swatprep` is a small Python library and CLI that prepares raw DEM, land-use, soil, weather and

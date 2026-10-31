@@ -2,9 +2,10 @@
 import streamlit as st
 
 from app.services.environment import get_report
+from app.ui.branding import setup_page
 from app.ui.status import ok_label
 
-st.set_page_config(page_title="swatprep", layout="wide")
+setup_page("swatprep")
 st.title("swatprep")
 
 report = get_report()

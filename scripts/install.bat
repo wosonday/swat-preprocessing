@@ -31,7 +31,8 @@ echo Installing SWATprep %VERSION%. This can take a few minutes the first time..
 uv tool install --python 3.12 --force "%SWATPREP_SOURCE%" || goto :fail
 
 for /f "usebackq delims=" %%B in (`uv tool dir --bin`) do set "BIN=%%B"
-powershell -NoProfile -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\SWATprep.lnk'); $s.TargetPath = '%BIN%\swatprep-ui.exe'; $s.WorkingDirectory = $env:USERPROFILE; $s.Description = 'SWATprep web app'; $s.Save()" || goto :fail
+for /f "usebackq delims=" %%T in (`uv tool dir`) do set "TOOLS=%%T"
+powershell -NoProfile -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\SWATprep.lnk'); $s.TargetPath = '%BIN%\swatprep-ui.exe'; $s.WorkingDirectory = $env:USERPROFILE; $s.Description = 'SWATprep web app'; $ico = '%TOOLS%\swatprep\Lib\site-packages\app\assets\icon.ico'; if (Test-Path $ico) { $s.IconLocation = $ico }; $s.Save()" || goto :fail
 
 echo.
 echo Done: SWATprep %VERSION%. Double-click "SWATprep" on your Desktop to start.
