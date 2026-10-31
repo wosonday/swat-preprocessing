@@ -14,7 +14,7 @@ from app.services.settings import load_settings
 from app.ui.branding import setup_page
 from app.ui.browse import browse_dialog
 from app.ui.explore import render_explore
-from app.ui.fields import FormContext, reset_form_state, toggle_part
+from app.ui.fields import FormContext, crs_select, reset_form_state, toggle_part
 from app.ui.results import render_result
 from app.ui.sections import render_project, render_section
 
@@ -59,7 +59,8 @@ def _create(key: str) -> None:
     if target.exists():
         state["new_error"] = f"{target} already exists. Open it instead."
         return
-    project_io.save_yaml(new_config(state["new_name"].strip() or target.parent.name, state["new_crs"].strip()), target)
+    crs = (state["new_crs"] or "").strip()
+    project_io.save_yaml(new_config(state["new_name"].strip() or target.parent.name, crs), target)
     state["new_error"] = None
     state["config_path"] = str(target)
 
@@ -107,7 +108,7 @@ with st.sidebar:
         with st.form("new_config", border=False):
             st.text_input("File", key=new_key, value=str((project_dir or Path.home()) / "config.yaml"))
             st.text_input("Project name", key="new_name", placeholder="MaDa_Basin_2026")
-            st.text_input("CRS", key="new_crs", placeholder="EPSG:32648")
+            crs_select("CRS", key="new_crs")
             st.form_submit_button("Create", icon=":material/add:", on_click=_create, args=(new_key,))
         if state.get("new_error"):
             st.error(state["new_error"], icon=":material/error:")

@@ -77,7 +77,7 @@ def test_validate_marks_missing_file_on_the_field(page, example_project):
 
 
 def test_schema_error_blocks_build_and_shows_on_field(page):
-    page.text_input(key="f::project.crs").set_value("").run()
+    page.selectbox(key="f::project.crs").set_value(None).run()
     page.button(key="build").click().run()
     _, action, result = page.session_state["last_run"]
     assert action == "build" and not result.ok and "Fix 1 field" in result.error
@@ -97,7 +97,7 @@ def test_new_config(monkeypatch, tmp_path):
     target = tmp_path / "basin" / "config.yaml"
     [t for t in at.text_input if t.label == "File"][0].set_value(str(target))
     at.text_input(key="new_name").set_value("Basin")
-    at.text_input(key="new_crs").set_value("EPSG:32648")
+    at.selectbox(key="new_crs").select("EPSG:32648")
     submit = [b for b in at.button if b.label == "Create"][0]
     submit.click().run()
     assert not at.exception
@@ -134,3 +134,32 @@ def test_missing_project_folder_is_flagged(monkeypatch, tmp_path):
     at = AppTest.from_file(PAGE, default_timeout=60).run()
     at.text_input(key="project_dir").set_value(str(tmp_path / "nope")).run()
     assert any("Folder not found" in c.value for c in at.caption)
+
+
+def test_crs_is_a_searchable_list(page):
+    crs = page.selectbox(key="f::project.crs")
+    assert crs.value == "EPSG:32648" and len(crs.options) > 1000
+    assert crs.options[0] == "EPSG:32647 · WGS 84 / UTM zone 47N"
+    crs.select("EPSG:3405").run()
+    assert page.session_state["cfg"]["project"]["crs"] == "EPSG:3405"
+
+
+def test_custom_crs_in_the_config_stays_selected(monkeypatch, example_project):
+    proj = "+proj=utm +zone=48 +datum=WGS84 +units=m +no_defs"
+    text = example_project.read_text(encoding="utf-8").replace('crs: "EPSG:32648"', f'crs: "{proj}"')
+    example_project.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
+    at = AppTest.from_file(PAGE, default_timeout=60).run()
+    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
+    crs = at.selectbox(key="f::project.crs")
+    assert crs.value == proj and crs.options[0] == proj
+    assert at.button(key="save").disabled
+
+
+def test_unknown_crs_is_flagged(monkeypatch, example_project):
+    text = example_project.read_text(encoding="utf-8").replace('crs: "EPSG:32648"', 'crs: "EPSG:999999"')
+    example_project.write_text(text, encoding="utf-8")
+    monkeypatch.setenv("SWATPREP_WORKSPACE", str(example_project.parent))
+    at = AppTest.from_file(PAGE, default_timeout=60).run()
+    at.selectbox(key="config_choice").select("config_minimal.yaml").run()
+    assert any("not a recognised CRS" in c.value for c in at.caption)

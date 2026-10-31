@@ -69,3 +69,13 @@ def monthly_climatology(monthly: pd.DataFrame, min_fraction: float = 0.8) -> pd.
         ok = n_years > 0 and n_valid >= min_fraction * n_years - 1e-9
         rows.append([m, mean, n_valid, n_years, ok])
     return pd.DataFrame(rows, columns=["month", "mean", "n_valid", "n_years", "ok"])
+
+
+def completeness(wide: pd.DataFrame) -> pd.DataFrame:
+    """Missing days per station and calendar month (long table for a heatmap)."""
+    rows = []
+    for station in wide.columns:
+        for period, month in wide[station].groupby(wide.index.to_period("M")):
+            n_missing = int(month.isna().sum())
+            rows.append([str(station), str(period), len(month), n_missing, round(100 * n_missing / len(month), 1)])
+    return pd.DataFrame(rows, columns=["station", "period", "n_days", "n_missing", "pct_missing"])

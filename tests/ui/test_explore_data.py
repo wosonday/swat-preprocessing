@@ -1,9 +1,10 @@
+import shutil
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from app.services.explore_data import load_config, load_streamflow, station_series
+from app.services.explore_data import load_config, load_streamflow, load_weather, station_series
 
 
 def test_load_config_reports_schema_problems(tmp_path: Path):
@@ -38,3 +39,34 @@ def test_station_series_trims_to_observed_period():
     wide = pd.DataFrame({"A": [np.nan, 1.0, np.nan, 2.0, np.nan]}, index=pd.date_range("2000-01-01", periods=5))
     s = station_series(wide, "A")
     assert s.index[0] == pd.Timestamp("2000-01-02") and s.index[-1] == pd.Timestamp("2000-01-04")
+
+
+def test_load_weather_keeps_missing_days(filled_project):
+    view = load_weather(load_config(filled_project)[0])
+    assert view.error is None and set(view.observed) == {"precip", "tmax", "tmin"}
+    precip = view.observed["precip"]["ST001"]
+    assert len(precip) == 10 and int(precip.isna().sum()) == 2
+
+
+def test_load_weather_reads_the_filled_copy_and_report(filled_project):
+    view = load_weather(load_config(filled_project)[0])
+    assert view.filled is not None and int(view.filled["precip"]["ST001"].isna().sum()) == 0
+    assert view.fill_report.loc[0, "correction_type"] == "ratio" and view.fill_note is None
+
+
+def test_fill_not_run_yet(filled_project):
+    shutil.rmtree(filled_project.parent / "data" / "filled")
+    view = load_weather(load_config(filled_project)[0])
+    assert view.filled is None and view.fill_note.startswith("No filled data yet")
+
+
+def test_missing_policy_fail_does_not_stop_explore(filled_project):
+    cfg = load_config(filled_project)[0]
+    assert cfg.weather.missing_policy == "fail"
+    assert load_weather(cfg).error is None
+
+
+def test_unreadable_weather_is_an_error(example_project):
+    shutil.rmtree(example_project.parent / "data" / "weather")
+    view = load_weather(load_config(example_project)[0])
+    assert view.error and not view.observed

@@ -8,10 +8,17 @@ a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
 ### Added
 - **Explore** on the Project page (switch **Configure | Explore**): charts of the data behind the saved
-  config. First view, **Streamflow**: per-station summary (period, % missing, min/mean/max, Q5/Q50/Q95),
+  config. **Weather**: a station × month heatmap of missing days (measured, or after gap filling), each
+  station's series with filled values and the days still missing, the fill report line, and the monthly
+  climatology of precipitation for measured and filled data side by side. **Streamflow**: per-station summary (period, % missing, min/mean/max, Q5/Q50/Q95),
   hydrograph with log scale and missing days in red, flow duration curve (Weibull plotting position) and
   monthly climatology that applies the WMO-No. 1203 completeness rules and flags months valid in fewer
-  than 80% of the years.
+  than 80% of the years. **Map**: the DEM, land-use, soil and clip rasters written by Build on
+  an interactive map (pydeck) with the project boundary, opacity, a Light / Dark / None basemap, a legend
+  with SWAT names and the share of area of each class, and the layer's CRS, pixel size and NoData share.
+- **CRS list**: `project.crs` (and the CRS of a new config) is a searchable list of common CRSs for
+  Vietnam plus every EPSG projected CRS; any other value can still be typed or pasted, and a status line
+  says whether it is a recognised projected CRS.
 - App icon (a river network converging on its outlet): browser tab, sidebar logo, Windows Desktop
   shortcut (`icon.ico`, 16-256 px) and Linux application menu; source in `app/assets/icon.svg`.
 

@@ -147,7 +147,7 @@ File mẫu có chú thích đầy đủ: [`examples/config_full.yaml`](../exampl
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
 | `name` | chuỗi | BB | Tên dự án, ghi vào `manifest.json` |
-| `crs` | chuỗi | BB | CRS đích (hệ tọa độ **chiếu**, vd `EPSG:32648`). Mọi raster đã cắt được chiếu về CRS này |
+| `crs` | chuỗi | BB | CRS đích (hệ tọa độ **chiếu**, vd `EPSG:32648`). Mọi raster đã cắt được chiếu về CRS này. Trên giao diện web: chọn trong danh sách (gõ để tìm, vd `48N`, `VN-2000`) hoặc dán giá trị khác |
 | `boundary` | đường dẫn | không | Ranh giới lưu vực (`.shp`, `.gpkg`, `.geojson`). Có thì `dem/landuse/soil` tự được cắt |
 | `output_dir` | đường dẫn | `./output` | Thư mục ghi toàn bộ kết quả |
 | `targets` | danh sách | `["swatplus"]` | `swatplus`, `swat` hoặc cả hai: quyết định định dạng weather |
@@ -659,6 +659,18 @@ Trên trang **Project**, chọn **Explore** (cạnh **Configure**) để xem bi�
 **đã lưu** trỏ tới; nếu form còn thay đổi chưa lưu, app nhắc lưu trước. **Reload data** đọc lại dữ liệu
 khi file đầu vào vừa được sửa bên ngoài app.
 
+**Weather** (cần mục `weather`):
+
+| Thành phần | Ý nghĩa |
+|---|---|
+| Variable / Data | Chọn biến; **Filled** chỉ có khi `weather.fill.output_dir` đã có số liệu đã điền |
+| Completeness | Ô trạm × tháng: xám nhạt là đủ ngày, cam → đỏ theo % ngày thiếu; ở Filled là phần **còn** thiếu sau khi điền |
+| Station | Chuỗi ngày của một trạm: xám là đo thực, chấm cam là giá trị đã điền, vạch đỏ là ngày còn thiếu; kèm dòng tóm tắt từ `fill_report.csv` |
+| Khí hậu tháng của mưa | Cột đôi Observed / Filled cho mỗi tháng; tháng chỉ được tính khi không thiếu ngày nào, ngày đã điền được tính nếu ≤ 10 ngày/tháng và < 5 ngày liên tiếp |
+
+Dùng heatmap để biết trạm nào, giai đoạn nào thiếu nhiều trước khi chọn trạm cho mô hình; so cột Observed
+và Filled để thấy bước điền làm thay đổi khí hậu tháng đến mức nào.
+
 **Streamflow** (cần mục `streamflow`):
 
 | Thành phần | Ý nghĩa |
@@ -671,6 +683,19 @@ khi file đầu vào vừa được sửa bên ngoài app.
 Tháng hợp lệ theo WMO-No. 1203 (2017): với `units: m3s` (trung bình tháng), thiếu tối đa 10 ngày và
 không quá 4 ngày liên tiếp; với `units: mm` (tổng tháng), không thiếu ngày nào. Tháng có số năm hợp lệ
 dưới 80% được vẽ nhạt và có cảnh báo: giá trị trung bình của tháng đó chưa đáng tin.
+
+**Map** (cần chạy **Build** trước): xem các raster trong `output/` (DEM, land use, soil, các mục `clip`)
+trên bản đồ, kèm đường ranh giới `project.boundary`.
+
+| Thành phần | Ý nghĩa |
+|---|---|
+| Layer / Opacity | Chọn lớp; giảm độ đục để nhìn nền bản đồ bên dưới |
+| Basemap | Light / Dark: nền CARTO–OpenStreetMap (cần internet); None: không có nền, làm việc offline |
+| Legend | DEM: thang màu theo độ cao; land use / soil: mã, tên SWAT (từ `*_vlookup.csv`), % diện tích tính trên độ phân giải gốc |
+| Layer | CRS, kích thước pixel, số hàng × cột, % NoData |
+
+Kiểm tra nhanh: lưu vực phải nằm đúng chỗ trên nền bản đồ (nằm giữa biển hay lệch khỏi sông là dấu hiệu
+sai CRS), raster phải lấp kín ranh giới, và các lớp có % diện tích hợp lý.
 
 ---
 
