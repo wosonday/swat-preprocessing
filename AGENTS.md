@@ -136,7 +136,9 @@ Do not:
 - Write a full SWAT+ `project.sqlite` for MVP.
 - Add calibration or sensitivity analysis.
 - Add automatic public data download.
-- Add a GUI.
+- Add a GUI that replaces QSWAT+ or SWAT+ Editor. The Streamlit web app in `app/` only edits and runs
+  this tool's YAML: keep logic in `app/services/` (no Streamlit imports, tested), keep `app/pages/` and
+  `app/ui/` thin, and never import `app` from `swatprep/`.
 - Claim SWAT/SWAT+ model compatibility beyond the files the tests cover.
 
 ## Hydrology and SWAT Assumptions
@@ -188,13 +190,17 @@ This behavior is covered by tests and should not regress.
 Run these before claiming work is complete:
 
 ```bash
-pytest -q
-python -m compileall swatprep tests
-python -m build --sdist --wheel
+uv sync --extra geo --extra app --extra dev
+uv run python -m pytest -q
+uv run python -m compileall swatprep app tests
+uv build
 ```
 
-Current baseline: `pytest -q` passes with **141 tests** (7 skipped = live tests
-that require uploaded sample files not present in CI).
+Current baseline (v0.3.1): `uv run python -m pytest -q` passes with **341 tests**.
+Use `python -m pytest`, not bare `pytest`, so a missing dev install fails loudly.
+
+When a field is added to `swatprep/config.py`, add it to `LAYOUT` in
+`app/services/form_layout.py`; `tests/ui/test_form_model.py` fails otherwise.
 
 For CLI changes, also run:
 

@@ -50,14 +50,21 @@ Thứ tự `build` chạy: `clip` -> `dem` -> `landuse` -> `soil` -> `weather` -
 
 ## 2. Cài đặt
 
-Yêu cầu Python 3.10 trở lên.
+**Người dùng** (không cần Python hay Docker): tải và nhấp đúp `install.bat` theo
+[docs/INSTALL.md](INSTALL.md). Sau khi cài, mở **SWATprep** trên Desktop để dùng giao diện web; mọi
+tham số YAML trong tài liệu này đều có ô nhập tương ứng trên trang **Project**, và lệnh `swatprep`
+(CLI) cũng có sẵn.
+
+**Người phát triển** (Python 3.10 trở lên; dự án dùng 3.12):
 
 ```bash
 cd D:\SWAT-model\swat-preprocessing
-pip install -e .[geo,dev]      # đầy đủ: raster, cắt, chiếu (rasterio, geopandas, shapely)
-# hoặc bản nhẹ (không có GIS): pip install -e .[dev]
-swatprep --version
+uv sync --extra geo --extra app --extra dev   # đầy đủ: raster, giao diện web, test
+uv run swatprep --version
+uv run swatprep-ui                            # mở giao diện web
 ```
+
+Có thể dùng pip thay uv: `pip install -e .[geo,app,dev]`. Bản nhẹ không có GIS: bỏ `geo`.
 
 Bản nhẹ vẫn chạy được weather, streamflow và kiểm tra cấu hình. Các chức năng raster (đọc mã, cắt,
 chiếu lại) cần `[geo]`; thiếu thư viện thì `build` báo cảnh báo `rasterio_missing` hoặc lỗi cắt rõ ràng.

@@ -46,7 +46,7 @@ The library will therefore produce a **SWAT-ready input package** that can be us
 | NG3 | Writing a complete SWAT+ `project.sqlite` | Version-specific schema changes make this fragile for a small library |
 | NG4 | Model calibration, sensitivity, or uncertainty analysis | Belongs to SWAT+ Toolbox, PEST, or separate calibration workflows |
 | NG5 | Automatic public data download | Useful later, but not needed for the first reliable library |
-| NG6 | GUI | QSWAT+ and SWAT+ Editor already provide the visual workflow |
+| NG6 | GUI that replaces QSWAT+ / SWAT+ Editor | QSWAT+ and SWAT+ Editor already provide the visual workflow. *Revised 2026-10:* a thin Streamlit web app (`app/`) now edits and runs this tool's YAML only; see `docs/superpowers/specs/2026-10-27-phase2-project-page-design.md` |
 
 ---
 
@@ -429,10 +429,11 @@ No `swatplus/schema.py` or complete SQLite writer is included in MVP. That can b
 | `netcdf4` | NetCDF backend |
 | `sqlalchemy` | Future SWAT+ SQLite support |
 
-Keep heavy geospatial dependencies behind an install extra:
+Keep heavy geospatial dependencies behind an install extra, and the web app behind another:
 
 ```bash
-pip install swatprep[geo]
+pip install swatprep[geo]        # rasterio, geopandas, shapely
+pip install swatprep[geo,app]    # + streamlit, ruamel.yaml (web app, `swatprep-ui`)
 ```
 
 ---

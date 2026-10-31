@@ -6,11 +6,16 @@ Public API:
     from swatprep.qa import QACheck
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .api import SWATPrepProject, PrepareResult
 from .config import SWATPrepConfig
 from .qa import QACheck
 
-__version__ = "0.1.0"
+try:
+    __version__ = version("swatprep")  # single source of truth: pyproject.toml
+except PackageNotFoundError:  # running from a source tree that is not installed
+    __version__ = "0+unknown"
 
 __all__ = [
     "SWATPrepProject",

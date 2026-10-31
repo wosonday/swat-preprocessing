@@ -22,6 +22,7 @@
 11. [Extending the Library](#11-extending-the-library)
 12. [Testing](#12-testing)
 13. [Complete End-to-End Example](#13-complete-end-to-end-example)
+14. [Web App and Distribution](#14-web-app-and-distribution)
 
 ---
 
@@ -120,8 +121,8 @@ Writer chosen by project.targets:
 
 ### Yêu cầu hệ thống
 
-- Python ≥ 3.10
-- pip hoặc uv
+- Python ≥ 3.10 (dự án ghim 3.12 trong `.python-version`)
+- uv (khuyến nghị; cài đúng phiên bản trong `uv.lock`) hoặc pip
 
 ### Cài đặt cơ bản
 
@@ -130,26 +131,23 @@ Writer chosen by project.targets:
 git clone <repo-url>
 cd swat-preprocessing
 
-# Cài đặt ở development mode (editable install)
-pip install -e .
+# Cài đầy đủ bằng uv (khuyến nghị): lõi + raster (geo) + giao diện web (app) + test (dev)
+uv sync --extra geo --extra app --extra dev
 
-# Hoặc với rasterio (để xử lý raster DEM, LandUse, Soil)
-pip install -e ".[geo]"
-
-# Với dev tools (pytest, coverage)
-pip install -e ".[dev]"
-
-# Cài đầy đủ tất cả
-pip install -e ".[geo,dev]"
+# Hoặc bằng pip (editable install)
+pip install -e ".[geo,app,dev]"
 ```
+
+Nhóm tuỳ chọn: `geo` (rasterio, geopandas, shapely), `app` (streamlit, ruamel.yaml), `dev` (pytest,
+pytest-cov). Người dùng cuối không cần các bước này: xem [docs/INSTALL.md](docs/INSTALL.md).
 
 ### Kiểm tra cài đặt
 
 ```bash
-swatprep --version
-# swatprep, version 0.1.0
+uv run swatprep --version
+# swatprep, version 0.3.1   (luôn khớp `version` trong pyproject.toml)
 
-python -c "import swatprep; print('OK')"
+uv run python -c "import swatprep; print(swatprep.__version__)"
 ```
 
 ### Cấu trúc thư mục project
@@ -1292,21 +1290,24 @@ _VALID_DOMAINS = ("dem", "landuse", "soil", "weather", "streamflow", "reservoir"
 ### Chạy tests
 
 ```bash
-# Tất cả tests
-pytest tests/ -v
+# Tất cả tests (lõi + giao diện web)
+uv run python -m pytest -q
 
 # Một file cụ thể
-pytest tests/test_weather.py -v
+uv run python -m pytest tests/test_weather.py -v
 
 # Một test cụ thể
-pytest tests/test_weather.py::test_wgn_stats_have_12_rows -v
+uv run python -m pytest tests/test_weather.py::test_wgn_stats_have_12_rows -v
 
 # Với coverage report
-pytest tests/ --cov=swatprep --cov-report=html
+uv run python -m pytest tests/ --cov=swatprep --cov-report=html
 
 # Chỉ tests không cần rasterio
-pytest tests/ -v -k "not rasterio"
+uv run python -m pytest tests/ -v -k "not rasterio"
 ```
+
+Dùng `python -m pytest` thay vì `pytest`: nếu `.venv` thiếu pytest, lệnh báo lỗi rõ ràng thay vì âm thầm
+chạy pytest của Python hệ thống.
 
 ### Fixture quan trọng trong `conftest.py`
 
@@ -1485,6 +1486,64 @@ else:
     print(f"Success! Output: {result.output_dir}")
     print(f"Warnings: {result.warning_count}")
 ```
+
+---
+
+## 14. Web App and Distribution
+
+### Kiến trúc
+
+```
+app/
+  Home.py                 trang chủ: báo cáo môi trường (phiên bản, driver GDAL, thư mục)
+  pages/1_Project.py      trang Project: thư mục dự án, form config, Validate, Build, kết quả
+  launch.py               lệnh `swatprep-ui`: chạy Streamlit từ thư mục app/
+  .streamlit/config.toml  theme OpenDesign (light/dark), chỉ nghe localhost
+  ui/                     mã Streamlit dùng chung (fields, sections, browse, results, status)
+  services/               Python thuần, không import streamlit, có test
+    settings.py           SWATPREP_DATA_ROOT / SWATPREP_WORKSPACE (tuỳ chọn)
+    environment.py        báo cáo môi trường, không bao giờ ném lỗi
+    form_model.py         field_spec(): kiểu Pydantic -> loại ô nhập
+    form_layout.py        LAYOUT (thứ tự trường), SECTIONS, PATH_KINDS, LABELS
+    form_state.py         đổi giá trị ô nhập <-> dict YAML; ánh xạ lỗi về trường
+    project_io.py         đọc/ghi YAML bằng ruamel (giữ comment)
+    runner.py             validate/build -> RunResult, không bao giờ ném lỗi
+    fs_browser.py         liệt kê thư mục, chặn path traversal
+    recent.py             thư mục dự án gần đây (~/.swatprep/)
+```
+
+Phụ thuộc một chiều: `pages -> ui -> services -> swatprep`. Lõi `swatprep/` không biết gì về giao diện.
+
+### Thêm một trường cấu hình mới
+
+1. Thêm trường vào model trong `swatprep/config.py` (kèm test của lõi).
+2. Thêm tên trường vào `LAYOUT[<Model>]` trong `app/services/form_layout.py`, đúng vị trí muốn hiển thị.
+   Nếu là `Path`, khai báo `PATH_KINDS` khi nó là thư mục (`dir`), tệp hoặc thư mục (`file_or_dir`) hay
+   đầu ra (`output`). Nhãn đẹp hơn tên trường: thêm vào `LABELS`.
+3. Chạy `uv run python -m pytest tests/ui -q`: `test_layout_covers_every_config_field` báo lỗi nếu quên
+   bước 2; `test_every_field_type_is_supported` báo lỗi nếu trường dùng kiểu form chưa hỗ trợ.
+
+Form không ghi giá trị mặc định vào YAML và không đổi khoá chưa sửa; mọi thay đổi đi qua
+`form_state.apply()`.
+
+### Chạy và đóng gói
+
+| Mục đích | Lệnh |
+|---|---|
+| Chạy từ mã nguồn | `uv run swatprep-ui` (thêm tham số Streamlit, ví dụ `--server.port 8502`) |
+| Kiểm tra gói cài đặt | `uv build`; `tests/ui/test_launch.py` kiểm tra wheel có `app/pages/*.py` và `app/.streamlit/config.toml` |
+| Docker | `docker compose up --build` -> `http://localhost:8501` |
+| Người dùng cuối | `scripts/install.bat`, `scripts/install.sh` (`uv tool install` từ archive của tag); xem [docs/INSTALL.md](docs/INSTALL.md) |
+
+`pages/` không có `__init__.py` nên được đóng gói qua `[tool.setuptools.package-data]`. Streamlit đọc
+`.streamlit/config.toml` theo thư mục làm việc, vì vậy `launch.py` đổi thư mục làm việc sang `app/`
+trước khi chạy.
+
+### Phát hành
+
+Quy trình đầy đủ và các lỗi thường gặp: [docs/RELEASING.md](docs/RELEASING.md). Tóm tắt: tăng
+`version` trong `pyproject.toml` -> `uv lock` -> PR, merge -> `git tag vX.Y.Z` trên `main` -> CI build
+image `ghcr.io/wosonday/swatprep:X.Y.Z` và tạo GitHub Release kèm hai script cài đặt.
 
 ---
 

@@ -10,16 +10,16 @@ Hướng dẫn này bao gồm toàn bộ vòng đời test: cài đặt môi tr�
 
 ```bash
 cd swat-preprocessing/
-pip install -e ".[dev]"          # swatprep + pytest, pydantic, pandas, click
-pip install -e ".[geo]"          # tuỳ chọn: rasterio cho DEM/LandUse/Soil
+uv sync --extra geo --extra app --extra dev   # lõi + raster + giao diện web + pytest, đúng phiên bản trong uv.lock
+# hoặc: pip install -e ".[geo,app,dev]"
 ```
 
 ### 1.2 Kiểm tra cài đặt
 
 ```bash
-swatprep --version               # phải in ra phiên bản
-swatprep --help                  # liệt kê các lệnh
-swatprep convert --help          # liệt kê subcommands convert
+uv run swatprep --version        # phải in ra đúng `version` trong pyproject.toml
+uv run swatprep --help           # liệt kê các lệnh
+uv run swatprep convert --help   # liệt kê subcommands convert
 ```
 
 ---
@@ -28,15 +28,30 @@ swatprep convert --help          # liệt kê subcommands convert
 
 ```bash
 cd swat-preprocessing/
-python -m pytest -v
+uv run python -m pytest -q
 ```
 
-**Kết quả mong đợi:**
+**Kết quả mong đợi** (v0.3.1, đã cài đủ `geo`, `app`, `dev`):
 ```
-246 passed in ~5s   (đã cài .[geo], xarray, netCDF4)
+341 passed   (khoảng 10-25 s; test build wheel trong tests/ui/test_launch.py chiếm phần lớn)
 ```
 
-Nếu chưa cài `rasterio`/`geopandas` (`pip install -e ".[geo]"`), các test raster và `clip` sẽ bị skip.
+Nếu chưa cài `rasterio`/`geopandas` (nhóm `geo`), các test raster và `clip` sẽ bị skip.
+
+### 2.0 Test giao diện web (`tests/ui/`)
+
+| Tệp | Kiểm tra |
+|---|---|
+| `test_settings.py`, `test_environment.py` | Biến môi trường, báo cáo môi trường (không bao giờ ném lỗi) |
+| `test_fs_browser.py`, `test_project_io.py`, `test_recent.py` | Liệt kê thư mục an toàn, YAML giữ comment, thư mục gần đây |
+| `test_form_model.py`, `test_form_state.py` | Kiểu trường -> ô nhập; **đồng bộ `LAYOUT` với `config.py`**; ghi YAML không thêm mặc định |
+| `test_runner.py` | Validate/Build trên bản sao `examples/` (end-to-end) |
+| `test_pages.py`, `test_project_form.py` | Trang chạy qua `streamlit.testing.v1.AppTest`: mở config, sửa, lưu, bật/tắt mục, lỗi tại ô, Build |
+| `test_launch.py` | Lệnh `swatprep-ui`; wheel có đủ trang và theme |
+
+```bash
+uv run python -m pytest tests/ui -q
+```
 
 ### 2.1 Chạy từng module test
 
