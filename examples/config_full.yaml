@@ -13,7 +13,7 @@ project:
   crs: "EPSG:32648"                 # (bắt buộc) CRS đích của MỌI raster đã cắt, vd UTM 48N
   boundary: "./data/boundary.geojson"  # .shp | .gpkg | .geojson; có thì build tự cắt dem/landuse/soil
   output_dir: "./output"            # = ./output
-  targets: ["swatplus"]             # "swatplus" | "swat" | cả hai; quyết định định dạng weather
+  targets: ["swatplus"]             # "swatplus" | "swat" | cả hai; chọn weather và header lookup đất
 
 # --- (tuỳ chọn) cắt rảnh tay từng raster theo danh sách; thường KHÔNG cần vì dem/landuse/soil
 #     đã tự cắt. Cần project.boundary. Chạy riêng: swatprep build config.yaml --only clip
@@ -51,7 +51,7 @@ soil:
                                     #   SNAM duy nhất); raw: ghi nguyên bảng đầu vào
   output_name: "soil_clip.tif"      # = soil_clip.tif; ghi vào <output_dir>/soil/
   clip: true                        # = true; chỉ giữ các loại đất có trong lưu vực
-  output_lookup: true               # = true; ghi soil/soil_vlookup.csv (SOIL_ID, SNAM); cần cột SNAM trong bảng
+  output_lookup: true               # = true; lookup đất: SOIL_ID,SNAM (swatplus) / SEQN,SNAM (swat)
   # resolution: 30                  # = để GDAL chọn (luôn lấy mẫu nearest)
 
 weather:
