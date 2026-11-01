@@ -150,7 +150,7 @@ File mẫu có chú thích đầy đủ: [`examples/config_full.yaml`](../exampl
 | `crs` | chuỗi | BB | CRS đích (hệ tọa độ **chiếu**, vd `EPSG:32648`). Mọi raster đã cắt được chiếu về CRS này. Trên giao diện web: chọn trong danh sách (gõ để tìm, vd `48N`, `VN-2000`) hoặc dán giá trị khác |
 | `boundary` | đường dẫn | không | Ranh giới lưu vực (`.shp`, `.gpkg`, `.geojson`). Có thì `dem/landuse/soil` tự được cắt |
 | `output_dir` | đường dẫn | `./output` | Thư mục ghi toàn bộ kết quả |
-| `targets` | danh sách | `["swatplus"]` | `swatplus`, `swat` hoặc cả hai: quyết định định dạng weather |
+| `targets` | danh sách | `["swatplus"]` | `swatplus`, `swat` hoặc cả hai: quyết định định dạng weather và header lookup đất |
 
 Lưu ý: file `boundary` **phải có CRS** (shapefile cần `.prj`; GeoJSON cần khai báo CRS). Công cụ tự
 chiếu ranh giới về CRS của từng raster nên ranh giới và raster được phép khác CRS nhau.
@@ -217,7 +217,7 @@ landuse:
 | `usersoil_format` | `swat` / `raw` | `swat` | `swat`: `usersoil.csv` đúng bố cục 152 cột của SWAT+ Editor (xem 5.2c); `raw`: ghi nguyên bảng đầu vào |
 | `output_name` | chuỗi | `soil_clip.tif` | Tên raster đã cắt, ghi vào `<output_dir>/soil/` |
 | `clip` | true/false | `true` | Cắt và chỉ giữ các loại đất có trong lưu vực |
-| `output_lookup` | true/false | `true` | Ghi bảng VLOOKUP `soil_vlookup.csv` (`SOIL_ID`, `SNAM`), xem 5.2; cần cột `SNAM` trong bảng đất |
+| `output_lookup` | true/false | `true` | Ghi bảng VLOOKUP đất theo `project.targets`: `SEQN,SNAM` cho Classic, `SOIL_ID,SNAM` cho SWAT+; xem 5.2 |
 | `resolution` | số > 0 | không | Kích thước ô đầu ra; luôn lấy mẫu `nearest` |
 
 Cột bắt buộc của bảng đất: `HYDGRP` (nhóm thủy văn A/B/C/D hoặc A/D, B/D, C/D), `SOL_ZMX`, `NLAYERS`.
@@ -427,7 +427,7 @@ QSWAT+ yêu cầu khi nạp raster sử dụng đất và thổ nhưỡng (Dile 
 | File | Cột | Nội dung | Dùng làm |
 |---|---|---|---|
 | `landuse/landuse_vlookup.csv` | `LANDUSE_ID`, `SWAT_CODE` | Giá trị raster sử dụng đất -> mã lớp SWAT (`FRST`, `AGRL`, ...) | Bảng tra sử dụng đất khi nạp raster vào QSWAT/QSWAT+ |
-| `soil/soil_vlookup.csv` | `SOIL_ID`, `SNAM` | Giá trị raster đất -> tên đất `SNAM` trong `usersoil.csv` | Bảng tra thổ nhưỡng khi nạp raster vào QSWAT/QSWAT+ |
+| `soil/soil_vlookup.csv` | Classic: `SEQN`, `SNAM`; SWAT+: `SOIL_ID`, `SNAM` | Giá trị raster đất -> tên đất `SNAM` trong `usersoil.csv` | Bảng tra thổ nhưỡng theo `project.targets` |
 
 `landuse_vlookup.csv`:
 
@@ -438,7 +438,7 @@ LANDUSE_ID,SWAT_CODE
 80,WATR
 ```
 
-`soil_vlookup.csv`:
+`soil_vlookup.csv` khi chọn `project.targets: [swatplus]`:
 
 ```csv
 SOIL_ID,SNAM
@@ -447,9 +447,13 @@ SOIL_ID,SNAM
 11375,Bd15-2a-4630
 ```
 
+Khi chọn `project.targets: [swat]`, file có header `SEQN,SNAM`, các mã và tên đất giữ nguyên.
+Khi chọn cả hai, `soil_vlookup.csv` dùng cho SWAT+ và `soil_vlookup_swat.csv` dùng cho Classic.
+`soil_key_col` chỉ chọn cột khóa trong bảng nguồn; header xuất ra tự chọn theo target.
+
 Quy tắc tạo bảng:
 
-- Mỗi giá trị chỉ một hàng, **sắp tăng dần**; tiêu đề cột cố định như trên dù bảng gốc đặt tên cột khác
+- Mỗi giá trị chỉ một hàng, **sắp tăng dần**; tiêu đề cột theo target như trên dù bảng gốc đặt tên cột khác
   (`source_code_col`, `swat_code_col`, `soil_key_col`).
 - Có `project.boundary` thì bảng chỉ gồm các giá trị **có trong lưu vực**, giống `landuse_lookup.csv` và `usersoil.csv`.
 - Mã bị lặp trong bảng gốc: giữ hàng **đầu tiên**. Với đất, nếu một `SOIL_ID` có nhiều hàng khác tên thì báo

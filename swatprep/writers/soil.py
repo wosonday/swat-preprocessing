@@ -17,9 +17,11 @@ from ..core.soil import SoilResult
 class SoilWriter:
     """Write usersoil.csv and companion files to the output directory."""
 
-    def __init__(self, result: SoilResult, output_dir: Path) -> None:
+    def __init__(self, result: SoilResult, output_dir: Path,
+                 targets: list[str] | None = None) -> None:
         self.result = result
         self.output_dir = output_dir
+        self.targets = set(targets or ["swatplus"])
 
     def write(self) -> list[Path]:
         out = self.output_dir
@@ -33,11 +35,17 @@ class SoilWriter:
         table.to_csv(usersoil_path, index=False, float_format="%.10g")
         written.append(usersoil_path)
 
-        # VLOOKUP table: raster value -> soil name (QSWAT / QSWAT+ soil lookup)
+        # Output headers follow the selected model; keep processor data unchanged.
         if self.result.vlookup is not None:
             vl_path = out / "soil_vlookup.csv"
-            self.result.vlookup.to_csv(vl_path, index=False)
+            key = "SOIL_ID" if "swatplus" in self.targets else "SEQN"
+            self.result.vlookup.rename(columns={"SOIL_ID": key}).to_csv(vl_path, index=False)
             written.append(vl_path)
+            if {"swat", "swatplus"} <= self.targets:
+                classic_path = out / "soil_vlookup_swat.csv"
+                self.result.vlookup.rename(columns={"SOIL_ID": "SEQN"}).to_csv(
+                    classic_path, index=False)
+                written.append(classic_path)
 
         # Raster codes summary (if available)
         if self.result.raster_codes is not None:

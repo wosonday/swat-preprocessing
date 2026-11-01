@@ -31,9 +31,10 @@ def make(tmp_dir):
     pd.DataFrame({"SOIL_ID": [7, 5, 5], "SNAM": ["B", "A", "A2"], "HYDGRP": ["B", "A", "A"],
                   "SOL_ZMX": [1000] * 3, "NLAYERS": [1] * 3}).to_csv(tmp_dir / "so.csv", index=False)
 
-    def build(landuse=None, soil=None):
+    def build(landuse=None, soil=None, targets=None):
         cfg = SWATPrepConfig.model_validate({
-            "project": {"name": "t", "crs": "EPSG:32648", "output_dir": str(tmp_dir / "out")},
+            "project": {"name": "t", "crs": "EPSG:32648", "output_dir": str(tmp_dir / "out"),
+                        **({"targets": targets} if targets is not None else {})},
             "landuse": {"raster": str(tmp_dir / "lu.tif"), "lookup": str(tmp_dir / "lu.csv"),
                         "source_code_col": "ID", "swat_code_col": "CODE", "swat_name_col": "CODE",
                         **(landuse or {})},
@@ -81,3 +82,38 @@ def test_soil_without_snam_column_raw_format_warns_and_skips(make, tmp_dir):
     result, out = make(soil={"usersoil_format": "raw"})
     assert not (out / "soil" / "soil_vlookup.csv").exists()
     assert any(c.name == "soil_vlookup_skipped" for c in result.qa_checks)
+
+
+@pytest.mark.parametrize("target,header", [("swat", "SEQN"), ("swatplus", "SOIL_ID")])
+@pytest.mark.parametrize("source_key", ["soil_id", "SEQN"])
+def test_soil_lookup_header_follows_target_not_source_key(make, tmp_dir, target, header, source_key):
+    src = tmp_dir / "so.csv"
+    pd.read_csv(src).rename(columns={"SOIL_ID": source_key}).to_csv(src, index=False)
+    result, out = make(soil={"soil_key_col": source_key}, targets=[target])
+    assert result.success
+    lookup = pd.read_csv(out / "soil" / "soil_vlookup.csv")
+    assert lookup.to_dict("list") == {header: [5, 7], "SNAM": ["A", "B"]}
+    assert set(lookup["SNAM"]) <= set(pd.read_csv(out / "soil" / "usersoil.csv")["SNAM"])
+
+
+@pytest.mark.parametrize("targets", [["swat", "swatplus"], ["swatplus", "swat"]])
+def test_both_soil_lookup_formats_are_written_without_overwriting(make, targets):
+    result, out = make(targets=targets)
+    assert result.success
+    soil = out / "soil"
+    assert pd.read_csv(soil / "soil_vlookup.csv").to_dict("list") == {
+        "SOIL_ID": [5, 7], "SNAM": ["A", "B"]}
+    assert pd.read_csv(soil / "soil_vlookup_swat.csv").to_dict("list") == {
+        "SEQN": [5, 7], "SNAM": ["A", "B"]}
+
+
+def test_both_soil_lookup_formats_respect_output_lookup_false(make):
+    result, out = make(soil={"output_lookup": False}, targets=["swat", "swatplus"])
+    assert result.success
+    assert not list((out / "soil").glob("soil_vlookup*.csv"))
+
+
+def test_empty_targets_defaults_soil_lookup_to_swatplus(make):
+    result, out = make(targets=[])
+    assert result.success
+    assert list(pd.read_csv(out / "soil" / "soil_vlookup.csv").columns) == ["SOIL_ID", "SNAM"]

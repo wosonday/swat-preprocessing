@@ -147,6 +147,11 @@ SWATPrepProject
 
 Weather output format is selected by `project.targets`; see
 [`docs/WEATHER_OUTPUT.md`](docs/WEATHER_OUTPUT.md).
+Soil lookup output also follows `project.targets`: `swat` writes `SEQN,SNAM`,
+and `swatplus` writes `SOIL_ID,SNAM`. For both targets, `soil_vlookup.csv`
+holds the SWAT+ lookup and `soil_vlookup_swat.csv` holds the Classic lookup;
+the raster and usersoil table are shared. This header selection does not
+change the source join key (`soil.soil_key_col`) or usersoil layout.
 
 The `converters/` layer runs independently of `build()`. It is a one-time
 pre-processing step that converts raw Vietnamese station data into formats that

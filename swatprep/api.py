@@ -146,7 +146,7 @@ class SWATPrepProject:
 
             if not failures(result.qa):
                 soil_out = output_dir / "soil"
-                written = SoilWriter(result, soil_out).write()
+                written = SoilWriter(result, soil_out, targets=cfg.project.targets).write()
                 all_qa.append(QACheck(
                     name="soil_written",
                     status="pass",

@@ -251,11 +251,14 @@ output/
   observed/   streamflow_ST001.csv  streamflow_meta.csv
 ```
 
-`landuse_vlookup.csv` (`LANDUSE_ID, SWAT_CODE`) and `soil_vlookup.csv` (`SOIL_ID, SNAM`) are the two-column
-raster-value lookup tables QSWAT / QSWAT+ ask for: one row per value, sorted, restricted to the basin when
-clipping, first row kept for repeated codes (set `output_lookup: false` in `landuse` / `soil` to skip them).
+`landuse_vlookup.csv` (`LANDUSE_ID, SWAT_CODE`) and `soil_vlookup.csv` are two-column raster-value lookup
+tables: one row per value, sorted, restricted to the basin when clipping, first row kept for repeated codes
+(set `output_lookup: false` in `landuse` / `soil` to skip them). The soil lookup header follows
+`project.targets`: `swat` writes `SEQN, SNAM`; `swatplus` (default) writes `SOIL_ID, SNAM`.
+When both are selected, `soil_vlookup.csv` contains the SWAT+ lookup and `soil_vlookup_swat.csv` the Classic
+lookup. `soil_key_col` still selects the source table's join key, independently of the output header.
 
-`project.targets` selects the weather format: `swatplus` (default) writes SWAT+ daily files plus
+`project.targets` also selects the weather format: `swatplus` (default) writes SWAT+ daily files plus
 `*.cli` index and linking files; `swat` writes SWAT Classic `pcp_<name>.txt` / `tmp_<name>.txt` and
 `master_*.txt` (whose `ID` column is the serial number 1, 2, 3, ... of the station, numbered separately in `master_pcp` and `master_tmp`); both write into `weather/swatplus/` and `weather/swat/`. See
 [docs/WEATHER_OUTPUT.md](docs/WEATHER_OUTPUT.md). Invalid input is reported as QA failures, and domains
