@@ -688,7 +688,7 @@ Tháng hợp lệ theo WMO-No. 1203 (2017): với `units: m3s` (trung bình thá
 không quá 4 ngày liên tiếp; với `units: mm` (tổng tháng), không thiếu ngày nào. Tháng có số năm hợp lệ
 dưới 80% được vẽ nhạt và có cảnh báo: giá trị trung bình của tháng đó chưa đáng tin.
 
-**Map** (cần chạy **Build** trước): xem các raster trong `output/` (DEM, land use, soil, các mục `clip`)
+**Map**: xem các raster trong `output/` (có sau khi **Build**) (DEM, land use, soil, các mục `clip`)
 trên bản đồ, kèm đường ranh giới `project.boundary`.
 
 | Thành phần | Ý nghĩa |
@@ -697,6 +697,20 @@ trên bản đồ, kèm đường ranh giới `project.boundary`.
 | Basemap | Light / Dark: nền CARTO–OpenStreetMap (cần internet); None: không có nền, làm việc offline |
 | Legend | DEM: thang màu theo độ cao; land use / soil: mã, tên SWAT (từ `*_vlookup.csv`), % diện tích tính trên độ phân giải gốc |
 | Layer | CRS, kích thước pixel, số hàng × cột, % NoData |
+
+**Trạm và lớp thêm (Overlays):**
+
+- Trạm mưa trong config (`weather.precip.stations` hoặc `weather.stations`) tự hiện thành chấm xanh lá, rê
+  chuột để xem tên trạm.
+- **Add layer**: chọn tệp `.shp`, `.gpkg`, `.geojson` hoặc CSV điểm (cột `lat`, `lon` hoặc `LAT`, `LONG`).
+  CSV có toạ độ mét thì đặt *CSV coordinates CRS* là CRS chiếu, ví dụ `EPSG:32648` (`lat` = toạ độ Bắc,
+  `lon` = toạ độ Đông). Dùng cách này cho trạm dòng chảy, ranh giới lưu vực mở rộng, tiểu lưu vực…
+- Mỗi lớp bật/tắt hoặc **Remove** được; danh sách lưu theo dự án trong `.swatprep/map_layers.json` (chỉ lưu
+  đường dẫn, không chép dữ liệu, không sửa `config.yaml`).
+- Bảng **Extents**: phạm vi (độ) của boundary, raster đang xem, trạm và từng lớp; diện tích đa giác (km²);
+  *Covers boundary* = phạm vi của lớp có chứa phạm vi lưu vực hay không (để biết raster/shapefile có phủ
+  kín lưu vực trước khi Build).
+- Bản đồ hiện cả khi chưa Build (chưa có raster).
 
 Kiểm tra nhanh: lưu vực phải nằm đúng chỗ trên nền bản đồ (nằm giữa biển hay lệch khỏi sông là dấu hiệu
 sai CRS), raster phải lấp kín ranh giới, và các lớp có % diện tích hợp lý.

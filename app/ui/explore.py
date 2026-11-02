@@ -9,9 +9,8 @@ import streamlit as st
 from app.services.climatology import completeness, monthly_climatology, monthly_values
 from app.services.explore_data import FlowView, WeatherView, load_config, load_streamflow, load_weather, station_series
 from app.services.flow_stats import summary
-from app.services.raster_view import LayerView, boundary_geojson, output_layers, render_layer
 from app.ui.charts import UNITS, climatology_chart, completeness_heatmap, fdc_chart, hydrograph, weather_detail
-from app.ui.maps import BASEMAPS, layer_deck
+from app.ui.map_view import render_map
 
 VIEWS = ["Weather", "Streamflow", "Map"]
 VARIABLES = {"precip": "Precipitation", "tmax": "Max temperature", "tmin": "Min temperature",
@@ -31,24 +30,8 @@ def _weather_data(path: str, mtime: float, token: int) -> WeatherView:
     return load_weather(cfg)
 
 
-@st.cache_data(show_spinner="Rendering the layer…", max_entries=16)
-def _layer(name: str, path: str, kind: str, lookup: str | None, mtime: float, token: int) -> LayerView:
-    """Cached by raster path + modification time; `token` changes on Reload data."""
-    from app.services.raster_view import Layer
-
-    return render_layer(Layer(name, Path(path), kind, Path(lookup) if lookup else None))
-
-
-@st.cache_data(show_spinner=False, max_entries=8)
-def _boundary(path: str | None, mtime: float, token: int) -> tuple[dict | None, str | None]:
-    return boundary_geojson(Path(path) if path else None)
-
-
-def _mtime(path: Path | None) -> float:
-    return path.stat().st_mtime if path is not None and path.exists() else 0.0
-
-
-def render_explore(path: Path, unsaved: bool) -> None:
+def render_explore(path: Path, unsaved: bool, roots: dict[str, Path] | None = None) -> None:
+    """`path`: the saved config; its folder is the project; `roots`: where Browse can start."""
     if unsaved:
         st.info("Showing the saved config; save to explore your changes.", icon=":material/info:")
     cfg, error = load_config(path)
@@ -73,7 +56,7 @@ def render_explore(path: Path, unsaved: bool) -> None:
             return
         _streamflow(_flow(str(path), path.stat().st_mtime, token))
     elif view == "Map":
-        _map(cfg, token)
+        render_map(cfg, path.parent, roots or {"Project": path.parent}, token)
 
 
 def _streamflow(data: FlowView) -> None:
@@ -116,47 +99,6 @@ def _streamflow(data: FlowView) -> None:
                "the mean needs valid months in at least 80% of the years.")
     if weak:
         st.warning(f"{len(weak)} month(s) below 80% of years are shown faded.", icon=":material/warning:")
-
-
-def _map(cfg, token: int) -> None:
-    layers = output_layers(cfg)
-    if not layers:
-        st.info("Run Build to see the output maps.", icon=":material/info:")
-        return
-    layer_col, opacity_col, basemap_col = st.columns([2, 2, 2], vertical_alignment="bottom")
-    name = layer_col.selectbox("Layer", [layer.name for layer in layers], key="map_layer")
-    opacity = opacity_col.slider("Opacity", 0.0, 1.0, 0.8, 0.05, key="map_opacity")
-    basemap = basemap_col.segmented_control("Basemap", BASEMAPS, default=BASEMAPS[0], required=True, key="map_basemap")
-    layer = next(layer for layer in layers if layer.name == name)
-
-    lookup = str(layer.lookup) if layer.lookup else None
-    view = _layer(layer.name, str(layer.path), layer.kind, lookup, _mtime(layer.path), token)
-    if view.error:
-        st.error(view.error, icon=":material/error:")
-        return
-    boundary_path = cfg.project.boundary
-    boundary, boundary_error = _boundary(str(boundary_path) if boundary_path else None, _mtime(boundary_path), token)
-    st.pydeck_chart(layer_deck(view, boundary, opacity, basemap), height=520)
-    if boundary_error:
-        st.caption(boundary_error)
-    if basemap != "None":
-        st.caption("Basemap tiles come from CARTO / OpenStreetMap; choose None to work offline.")
-
-    legend_col, stats_col = st.columns([3, 2])
-    with legend_col:
-        st.markdown("**Legend**")
-        if layer.kind == "categorical":
-            table = view.legend[["color", "code", "label", "pct_area"]]
-            config = {"color": st.column_config.TextColumn("", width="small"), "code": "Code", "label": "Name",
-                      "pct_area": st.column_config.NumberColumn("Area (%)", format="%.1f")}
-        else:
-            table = view.legend[["color", "label"]]
-            config = {"color": st.column_config.TextColumn("", width="small"), "label": "Value"}
-        swatch = table.style.map(lambda c: f"background-color: {c}; color: {c}", subset=["color"])
-        st.dataframe(swatch, hide_index=True, column_config=config)
-    with stats_col:
-        st.markdown("**Layer**")
-        st.dataframe([{"Property": k, "Value": v} for k, v in view.stats.items()], hide_index=True)
 
 
 def _unit(cfg, variable: str) -> str:

@@ -1,3 +1,4 @@
+import json
 import shutil
 from pathlib import Path
 
@@ -60,9 +61,35 @@ def test_back_to_configure_keeps_edits(page):
     assert page.selectbox(key="f::dem.resampling").value == "cubic"
 
 
-def test_map_asks_for_a_build_first(page):
+def test_map_before_build_shows_the_boundary_and_stations(page):
     explore(page, "Map")
-    assert any("Run Build to see the output maps" in i.value for i in page.info)
+    assert not page.exception and len(page.get("deck_gl_json_chart")) == 1
+    assert page.selectbox(key="map_layer").options == ["No output raster yet"]
+    assert page.checkbox(key="overlay_stations").value
+    assert any("Run Build to add the DEM" in c.value for c in page.caption)
+
+
+def test_add_and_remove_an_overlay(page, example_project):
+    project = example_project.parent
+    (project / "Q_stations.csv").write_text("ID,NAME,LAT,LONG\nQ1,Xa La,15.6,105.3\n", encoding="utf-8")
+    explore(page, "Map")
+    page.text_input(key="overlay_path").set_value("Q_stations.csv").run()
+    page.button(key="overlay_add").click().run()
+    assert not page.exception
+    saved = json.loads((project / ".swatprep" / "map_layers.json").read_text(encoding="utf-8"))
+    assert [Path(i["path"]).name for i in saved] == ["Q_stations.csv"] and saved[0]["crs"] == "EPSG:4326"
+    assert page.checkbox(key="overlay_on::0").value
+    assert "Q_stations.csv" in list(page.get("dataframe")[0].value["layer"])        # Extents table
+    page.button(key="overlay_remove::0").click().run()
+    assert json.loads((project / ".swatprep" / "map_layers.json").read_text(encoding="utf-8")) == []
+
+
+def test_bad_overlay_is_reported(page, example_project):
+    (example_project.parent / "bad.csv").write_text("a,b\n1,2\n", encoding="utf-8")
+    explore(page, "Map")
+    page.text_input(key="overlay_path").set_value("bad.csv").run()
+    page.button(key="overlay_add").click().run()
+    assert "needs lat and lon" in page.error[0].value
 
 
 def test_map_shows_built_layers(page, example_project):

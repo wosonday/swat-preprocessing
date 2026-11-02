@@ -31,3 +31,28 @@ def test_basemap_none_sends_no_tile_requests():
     deck = spec(layer_deck(VIEW, None, 1.0, "None"))
     assert deck.get("mapProvider") is None and deck.get("mapStyle") is None
     assert spec(layer_deck(VIEW, None, 1.0, "Dark"))["mapProvider"] == "carto"
+
+
+def test_overlays_add_points_and_outlines():
+    from app.services.overlays import OverlayView
+
+    stations = OverlayView("Rain stations", kind="point", count=1,
+                           points=[{"position": [105.2, 19.9], "label": "Xa La"}], bounds=(105.2, 19.9, 105.2, 19.9))
+    shapes = OverlayView("sub.shp", kind="polygon", count=1, geojson=BOUNDARY, bounds=(104.9, 19.5, 105.5, 20.3))
+    built = layer_deck(VIEW, BOUNDARY, 1.0, "Light", overlays=[(stations, "#00aa54"), (shapes, "#ff7528")])
+    deck = spec(built)
+    types = [layer["@@type"] for layer in deck["layers"]]
+    assert types == ["BitmapLayer", "GeoJsonLayer", "GeoJsonLayer", "ScatterplotLayer"]   # points on top
+    assert deck["layers"][3]["getFillColor"] == [0, 170, 84]
+    assert deck["layers"][3]["radiusUnits"] == "pixels"     # a plain string would become the expression @@=pixels
+    assert deck["layers"][2]["getLineColor"] == [255, 117, 40]
+    assert built._tooltip == {"text": "{label}"}           # pydeck keeps the tooltip outside the JSON
+
+
+def test_map_without_a_raster_fits_the_overlays():
+    from app.services.overlays import OverlayView
+
+    shapes = OverlayView("sub.shp", kind="polygon", count=1, geojson=BOUNDARY, bounds=(104.0, 19.0, 106.0, 21.0))
+    deck = spec(layer_deck(None, None, 1.0, "None", overlays=[(shapes, "#ff7528")]))
+    assert [layer["@@type"] for layer in deck["layers"]] == ["GeoJsonLayer"]
+    assert abs(deck["initialViewState"]["longitude"] - 105.0) < 0.01
