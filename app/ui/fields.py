@@ -46,7 +46,12 @@ def _label(spec: FieldSpec) -> str:
 
 
 def _on_change(ctx_cfg: dict, section_path: str, spec: FieldSpec, key: str) -> None:
-    apply(section_at(ctx_cfg, section_path), spec, st.session_state[key])
+    try:
+        section = section_at(ctx_cfg, section_path)
+    except (KeyError, IndexError, TypeError):
+        return  # the block was removed meanwhile (section off, fill type changed, clip item removed)
+    if key in st.session_state:
+        apply(section, spec, st.session_state[key])
 
 
 def _error(ctx: FormContext, path: str) -> None:

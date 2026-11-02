@@ -158,7 +158,7 @@ if mode == "Configure":
     with tabs[-1]:
         st.code(project_io.dump_yaml(cfg), language="yaml")
 else:
-    render_explore(path, unsaved=project_io.dump_yaml(cfg) != state["clean_yaml"])
+    render_explore(path, unsaved=project_io.dump_yaml(cfg) != state["clean_yaml"], roots=ctx.roots)
 
 # ---------------------------------------------------------------- sidebar: save (after the form, so it sees every edit)
 with st.sidebar:

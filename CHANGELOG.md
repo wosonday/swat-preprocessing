@@ -4,6 +4,34 @@ All notable changes to swatprep. Versions follow [Semantic Versioning](https://s
 each version has a Git tag `vX.Y.Z`, a Docker image `ghcr.io/wosonday/swatprep:X.Y.Z` and, from 0.3.0,
 a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
+## [0.7.0] - 2026-11-02
+
+### Added
+- Explore › Map shows the **rain stations** of the config (`weather.precip.stations` or `weather.stations`;
+  `ID,NAME,LAT,LONG,ELEV` headers work) as points with their names.
+- **Overlays** on Explore › Map (web app only): add a vector file (`.shp`, `.gpkg`, `.geojson`) or a CSV of
+  points (`lat`/`lon`, `LAT`/`LONG`; degrees, or metres with a projected CRS such as `EPSG:32648`), for
+  example streamflow stations or a wider basin outline. Points are drawn as dots, lines and polygons as
+  outlines over the DEM, land use or soil; each layer can be switched on or off or removed. The list is kept
+  per project in `<project>/.swatprep/map_layers.json`; `config.yaml` is not changed.
+- **Extents** table under the map: extent in degrees of the boundary, the shown raster, the stations and each
+  overlay, polygon area in km² (in `project.crs`), and whether each extent covers the boundary's.
+- The map is shown before Build too (boundary, stations and overlays), to compare extents early.
+
+
+### Fixed
+- The Project page could stop with a `KeyError` in `section_at` when a field change arrived for a block that
+  had just been removed (a section switched off, the fill type changed, a clip item removed); such a
+  change is now ignored.
+- `uv.lock` records version 0.6.1, matching `pyproject.toml` (`uv sync --locked`, used by CI and the Docker
+  build, refused the 0.6.1 tag).
+
+## [0.6.1] - 2026-11-01
+
+### Fixed
+- `soil_vlookup.csv` uses the key column of the selected model: `SOIL_ID` for SWAT+, `SEQN` for SWAT 2012;
+  with both targets, `soil_vlookup_swat.csv` is written as well.
+
 ## [0.6.0] - 2026-10-31
 
 ### Added
