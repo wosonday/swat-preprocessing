@@ -15,6 +15,14 @@ class FillInputs:
     fill_source: FillSource
     min_overlap_days: int
     out_dir: Path
+    fill_ungauged: bool = False
+    correct_ungauged: bool = True
+    max_borrow_km: float = 50.0
+
+    def filler_options(self) -> dict:
+        """Keyword arguments of WeatherGapFiller besides the two sources."""
+        return {"min_overlap_days": self.min_overlap_days, "fill_ungauged": self.fill_ungauged,
+                "correct_ungauged": self.correct_ungauged, "max_borrow_km": self.max_borrow_km}
 
 
 def parse_var_map(text: str) -> dict[str, str]:
@@ -56,6 +64,9 @@ def resolve_fill_inputs(o: dict) -> FillInputs:
         "type": o.get("fill_source_type"),
         "min_overlap_days": o.get("min_overlap_days"),
         "output_dir": o.get("out_dir"),
+        "fill_ungauged": o.get("fill_ungauged"),
+        "correct_ungauged": o.get("correct_ungauged"),
+        "max_borrow_km": o.get("max_borrow_km"),
     })
     csv = _put(dict(fill.get("csv") or {}), {
         "stations": o.get("fill_stations"),
@@ -79,9 +90,14 @@ def resolve_fill_inputs(o: dict) -> FillInputs:
     return FillInputs(
         real_cfg=real_cfg,
         fill_source=_build_source(fill_cfg, real_cfg),
-        min_overlap_days=fill_cfg.min_overlap_days,
         out_dir=fill_cfg.output_dir,
+        **_filler_options(fill_cfg),
     )
+
+
+def _filler_options(fill_cfg: WeatherFillConfig) -> dict:
+    return {"min_overlap_days": fill_cfg.min_overlap_days, "fill_ungauged": fill_cfg.fill_ungauged,
+            "correct_ungauged": fill_cfg.correct_ungauged, "max_borrow_km": fill_cfg.max_borrow_km}
 
 
 def fill_for_build(weather: WeatherConfig, qa: list) -> WeatherConfig:
@@ -102,7 +118,7 @@ def fill_for_build(weather: WeatherConfig, qa: list) -> WeatherConfig:
         raise ConfigError("weather.fill.output_dir must differ from weather.data_dir "
                           "(the observed files would be overwritten)")
     real = weather.model_copy(update={"fill": None, "missing_policy": "warn"})
-    result = WeatherGapFiller(real, _build_source(fill_cfg, real), fill_cfg.min_overlap_days).run()
+    result = WeatherGapFiller(real, _build_source(fill_cfg, real), **_filler_options(fill_cfg)).run()
     qa.extend(result.qa)
     written = WeatherFillWriter(result, out).write()
     qa.append(QACheck(
@@ -124,4 +140,4 @@ def _build_source(fill_cfg: WeatherFillConfig, real_cfg: WeatherConfig) -> FillS
         stations=csv.stations, data_dir=csv.data_dir, file_pattern=csv.file_pattern,
         variables=real_cfg.variables, start=real_cfg.start, end=real_cfg.end,
         missing_policy="warn",
-    ))
+    ))

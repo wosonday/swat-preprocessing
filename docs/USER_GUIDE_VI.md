@@ -285,6 +285,9 @@ lấy từ hai mạng lưới khác nhau, mỗi file đều bắt đầu từ 1.
 | `output_dir` | đường dẫn | không | Nơi ghi CSV đã điền và `fill_report.csv` |
 | `run_in_build` | true/false | `false` | `true`: `swatprep build` tự điền trước (dữ liệu gốc là `weather.stations`/`data_dir`), ghi CSV đã điền vào `output_dir` rồi dựng weather từ đó: một file, một lệnh. Cần `output_dir` khác `data_dir` |
 | `min_overlap_days` | số nguyên >= 0 | `10` | Ngưỡng cảnh báo: số ngày trùng giữa số liệu đo và nguồn điền ít hơn giá trị này thì báo `low_confidence`. **Không chặn việc điền** |
+| `fill_ungauged` | true/false | `false` | `true`: trạm **không có ngày đo nào** (trạm ảo, hoặc có trong bảng trạm mà không có file số liệu) được điền toàn bộ từ nguồn điền. `false`: trạm đó không được điền (ra `-99`) |
+| `correct_ungauged` | true/false | `true` | Với các trạm trên: mượn hệ số hiệu chỉnh của trạm có đo **gần nhất** (cùng biến, hệ số đạt `pass`) trong `max_borrow_km`. `false`, hoặc không có trạm nào đủ gần: dùng giá trị thô của nguồn điền |
+| `max_borrow_km` | số > 0 | `50` | Bán kính (km, khoảng cách đường tròn lớn) để tìm trạm cho mượn hệ số |
 | `netcdf.path` | đường dẫn | BB | File NetCDF lưới **theo ngày**, mưa mm, nhiệt độ °C |
 | `netcdf.var_map` | từ điển | BB | Tên biến swatprep -> tên biến trong file, vd `{precip: pr, tmax: tasmax, tmin: tasmin}` |
 | `netcdf.lat_name`, `lon_name`, `time_name` | chuỗi | `auto` | Chỉ đặt khi tên trục không thuộc nhóm thông dụng |
@@ -533,6 +536,23 @@ swatprep fill weather --config config.fill.yaml
 điền, số ngày trùng, loại và giá trị hiệu chỉnh, trạng thái). Sau đó trỏ `weather.stations` và
 `weather.data_dir` của `config.yaml` vào thư mục này. Trạng thái `warn`/`low_confidence` nghĩa là số ngày trùng
 ít hơn `min_overlap_days`: nên xem lại trước khi dùng.
+
+**Trạm ảo (trạm không có số liệu đo):** trạm không có ngày đo nào thì không có giai đoạn trùng để tính hệ số,
+nên mặc định không được điền. Đặt `fill_ungauged: true` để lấy toàn bộ chuỗi từ nguồn điền tại vị trí trạm. Khi
+`correct_ungauged: true` (mặc định), hệ số của trạm có đo gần nhất trong `max_borrow_km` được áp dụng (giả định
+sai số của nguồn lưới thay đổi chậm trong không gian); không có trạm nào đủ gần thì dùng giá trị thô. Trạm ảo luôn
+có trạng thái `warn`; `fill_report.csv` ghi thêm `correction_from` (trạm cho mượn) và `distance_km`. Ví dụ:
+
+```yaml
+  fill:
+    type: netcdf
+    output_dir: ./data/filled
+    fill_ungauged: true
+    correct_ungauged: true
+    max_borrow_km: 50
+```
+
+Cờ CLI tương ứng: `--fill-ungauged`, `--no-correct-ungauged`, `--max-borrow-km 50`.
 
 Ví dụ `config.fill.yaml`:
 

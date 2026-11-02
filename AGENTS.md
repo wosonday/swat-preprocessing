@@ -196,11 +196,13 @@ uv run python -m compileall swatprep app tests
 uv build
 ```
 
-Current baseline (v0.7.0): `uv run python -m pytest -q` passes with **471 tests**.
+Current baseline (v0.8.0): `uv run python -m pytest -q` passes with **489 tests**.
 Use `python -m pytest`, not bare `pytest`, so a missing dev install fails loudly.
 
-When a field is added to `swatprep/config.py`, add it to `LAYOUT` in
-`app/services/form_layout.py`; `tests/ui/test_form_model.py` fails otherwise.
+When a field is added to `swatprep/config.py`, declare it as `Field(..., description="...")` (English, 1-3
+sentences: what it is, allowed values / default, an example) and add it to `LAYOUT` in
+`app/services/form_layout.py`; `tests/ui/test_form_model.py` fails otherwise. The description is the field's
+help in the web app.
 
 For CLI changes, also run:
 

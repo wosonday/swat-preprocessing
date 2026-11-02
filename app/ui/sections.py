@@ -4,15 +4,24 @@ from __future__ import annotations
 import streamlit as st
 
 from swatprep.config import (
-    ClipItemConfig, FillCSVConfig, FillNetCDFConfig, ProjectConfig, WeatherConfig, WeatherFillConfig,
-    WeatherSourceConfig, WeatherUnitsConfig,
+    ClipItemConfig, FillCSVConfig, FillNetCDFConfig, ProjectConfig, SWATPrepConfig, WeatherConfig,
+    WeatherFillConfig, WeatherSourceConfig, WeatherUnitsConfig,
 )
 
 from app.services.form_layout import SECTIONS
-from app.ui.fields import FORM, FormContext, render_model, reset_form_state, section_at, toggle_part
+from app.ui.fields import FORM, FormContext, help_caption, render_model, reset_form_state, section_at, toggle_part
+
+
+def _intro(key: str) -> None:
+    help_caption(SWATPrepConfig.model_fields[key].description)
+
+
+def _field_help(model, name: str) -> str | None:
+    return model.model_fields[name].description
 
 
 def render_project(ctx: FormContext) -> None:
+    _intro("project")
     render_model(ctx, ProjectConfig, "project")
 
 
@@ -51,7 +60,7 @@ def render_weather(ctx: FormContext) -> None:
     st.markdown("**Stations**")
     render_model(ctx, WeatherConfig, "weather", only=["stations", "data_dir", "file_pattern"])
     for part, label in (("precip", "Separate precipitation source"), ("temp", "Separate temperature source")):
-        if toggle_part(ctx, "weather", part, label):
+        if toggle_part(ctx, "weather", part, label, help=_field_help(WeatherConfig, part)):
             with st.container(border=True):
                 render_model(ctx, WeatherSourceConfig, f"weather.{part}")
 
@@ -61,7 +70,7 @@ def render_weather(ctx: FormContext) -> None:
         _units(ctx)
 
     st.markdown("**Gap filling**")
-    if toggle_part(ctx, "weather", "fill", "Fill missing values"):
+    if toggle_part(ctx, "weather", "fill", "Fill missing values", help=_field_help(WeatherConfig, "fill")):
         with st.container(border=True):
             render_model(ctx, WeatherFillConfig, "weather.fill")
             fill = section_at(ctx.cfg, "weather.fill")
@@ -82,6 +91,7 @@ RENDERERS = {
 
 
 def render_section(ctx: FormContext, key: str) -> None:
+    _intro(key)
     RENDERERS.get(key, lambda c: render_simple(c, key))(ctx)
 
 

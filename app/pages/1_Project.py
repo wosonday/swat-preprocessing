@@ -6,6 +6,7 @@ from pathlib import Path
 import streamlit as st
 
 from app.services import project_io, runner
+from swatprep.config import SWATPrepConfig
 from app.services.form_layout import SECTIONS
 from app.services.form_state import count_for, file_errors, schema_errors
 from app.services.projects import default_config, list_configs
@@ -102,7 +103,9 @@ ctx = FormContext(cfg=cfg, base_dir=path.parent, roots=_roots(project))
 with st.sidebar:
     st.subheader("Functions")
     for key, (label, _model) in SECTIONS.items():
-        toggle_part(ctx, "", key, label, factory=(lambda: [{}]) if key == "clip" else dict)
+        toggle_part(ctx, "", key, label, factory=(lambda: [{}]) if key == "clip" else dict,
+                    help=SWATPrepConfig.model_fields[key].description)
+    st.toggle("Show help", key="show_help", help="Show the description under every field. Hover ⓘ for one field.")
 
 # ---------------------------------------------------------------- header and actions
 st.title((cfg.get("project") or {}).get("name") or path.stem)

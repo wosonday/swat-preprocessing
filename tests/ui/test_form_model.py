@@ -80,3 +80,18 @@ def test_path_kinds():
 
 def test_humanize():
     assert humanize("swat_code_col") == "Swat code col"
+
+
+def test_every_form_field_has_a_description():
+    """Each field shown in the form carries help text (shown as ⓘ and with Show help)."""
+    from app.services.form_layout import LAYOUT
+
+    missing = [f"{model.__name__}.{name}" for model, names in LAYOUT.items() for name in names
+               if not (model.model_fields[name].description or "").strip()]
+    assert missing == []
+
+
+def test_field_spec_carries_the_description():
+    from swatprep.config import DEMConfig
+
+    assert field_spec(DEMConfig, "output_name").help.startswith("File name of the clipped DEM")

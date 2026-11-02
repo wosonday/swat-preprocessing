@@ -41,6 +41,16 @@ def section_at(cfg: dict, path: str):
     return node
 
 
+def show_help() -> bool:
+    """The Show help switch in the sidebar: descriptions under every field."""
+    return bool(st.session_state.get("show_help"))
+
+
+def help_caption(text: str | None) -> None:
+    if text and show_help():
+        st.caption(text)
+
+
 def _label(spec: FieldSpec) -> str:
     return LABELS.get(spec.name, humanize(spec.name)) + (" *" if spec.required else "")
 
@@ -87,8 +97,9 @@ def _mapping(ctx: FormContext, section: dict, spec: FieldSpec, path: str, key: s
         table, key=key, num_rows="dynamic", width="stretch", hide_index=True,
         column_config={
             "variable": st.column_config.SelectboxColumn(
-                "Variable", options=["precip", "tmax", "tmin", "wind", "solar", "humidity"], required=True),
-            "name": st.column_config.TextColumn("Name in file", required=True),
+                "Variable", options=["precip", "tmax", "tmin", "wind", "solar", "humidity"], required=True,
+                help="swatprep variable"),
+            "name": st.column_config.TextColumn("Name in file", required=True, help=spec.help),
         },
     )
     value = {v: n.strip() for v, n in zip(edited["variable"], edited["name"])
@@ -122,11 +133,12 @@ def render_field(ctx: FormContext, model: type[BaseModel], name: str, section_pa
     key = FORM + path
     if spec.kind == "mapping":
         _mapping(ctx, section, spec, path, key)
+        help_caption(spec.help)
         _error(ctx, path)
         return
     if key not in st.session_state:
         st.session_state[key] = to_widget(spec, section.get(name))
-    common = {"key": key, "on_change": _on_change, "args": (ctx.cfg, section_path, spec, key)}
+    common = {"key": key, "on_change": _on_change, "args": (ctx.cfg, section_path, spec, key), "help": spec.help}
     label = _label(spec)
 
     if spec.kind == "path":
@@ -158,6 +170,7 @@ def render_field(ctx: FormContext, model: type[BaseModel], name: str, section_pa
         crs_select(label, **common)
     else:
         st.text_input(label, **common)
+    help_caption(spec.help)
     _error(ctx, path)
 
 
@@ -184,12 +197,13 @@ def render_model(ctx: FormContext, model: type[BaseModel], section_path: str, on
     flush()
 
 
-def toggle_part(ctx: FormContext, parent_path: str, name: str, label: str, factory=dict) -> bool:
+def toggle_part(ctx: FormContext, parent_path: str, name: str, label: str, factory=dict,
+                help: str | None = None) -> bool:
     """A switch that adds or removes an optional block; a removed block is kept for this session."""
     parent = section_at(ctx.cfg, parent_path) if parent_path else ctx.cfg
     path = f"{parent_path}.{name}" if parent_path else name
     stash = st.session_state.setdefault(FORM + "stash", {})
-    on = st.toggle(label, value=name in parent, key=FORM + "on::" + path)
+    on = st.toggle(label, value=name in parent, key=FORM + "on::" + path, help=help)
     if on and name not in parent:
         parent[name] = stash.pop(path, None) or factory()
     elif not on and name in parent:

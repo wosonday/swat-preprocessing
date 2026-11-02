@@ -7,6 +7,7 @@ import streamlit as st
 
 from app.services.projects import ProjectError, create_config, free_config_name
 from app.ui.fields import crs_select
+from swatprep.config import ProjectConfig
 
 LOCKED = "Save or discard your changes first."
 
@@ -46,11 +47,13 @@ def render_config_picker(project: Path, configs: list[Path], current: Path | Non
 @st.dialog("New config")
 def new_config_dialog(project: Path, name: str = "", crs: str | None = None) -> None:
     st.caption(f"Created in `{project}`")
-    file_name = st.text_input("File name", value=free_config_name(project), key="new_config_file")
-    project_name = st.text_input("Project name", value=name or project.name, key="new_config_name")
+    file_name = st.text_input("File name", value=free_config_name(project), key="new_config_file",
+                              help="A file name only, ending in .yaml or .yml; it is created in this project folder.")
+    project_name = st.text_input("Project name", value=name or project.name, key="new_config_name",
+                                 help=ProjectConfig.model_fields["name"].description)
     if crs and "new_config_crs" not in st.session_state:
         st.session_state["new_config_crs"] = crs
-    crs_value = crs_select("CRS", key="new_config_crs")
+    crs_value = crs_select("CRS", key="new_config_crs", help=ProjectConfig.model_fields["crs"].description)
     if st.button("Create", type="primary", icon=":material/add:", key="new_config_create"):
         try:
             path = create_config(project, file_name, project_name, crs_value or "")

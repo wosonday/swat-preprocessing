@@ -4,6 +4,22 @@ All notable changes to swatprep. Versions follow [Semantic Versioning](https://s
 each version has a Git tag `vX.Y.Z`, a Docker image `ghcr.io/wosonday/swatprep:X.Y.Z` and, from 0.3.0,
 a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
+## [Unreleased]
+
+## [0.8.0] - 2026-11-02
+
+### Added
+- **Field help** in the web app: every field of the config form (and of New project / New config) has an ⓘ
+  tooltip with what it does, its allowed values or default, and an example; the **Show help** switch in the
+  sidebar writes these descriptions under every field, with a short introduction for each section.
+  The texts live in `swatprep/config.py` as `Field(description=...)`, so the schema documents itself.
+- **Virtual stations** in gap filling: `weather.fill.fill_ungauged: true` fills stations with no observed day
+  (or no data file) entirely from the fill source, instead of leaving them at `-99`. With
+  `correct_ungauged: true` (default) the bias correction of the nearest gauged station (same variable, passing
+  correction) within `max_borrow_km` (default 50 km) is applied; otherwise raw source values are used.
+  `fill_report.csv` gains `correction_from` and `distance_km`. CLI: `--fill-ungauged`, `--no-correct-ungauged`,
+  `--max-borrow-km`.
+
 ## [0.7.0] - 2026-11-02
 
 ### Added

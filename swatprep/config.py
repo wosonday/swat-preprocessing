@@ -25,78 +25,258 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ProjectConfig(BaseModel):
-    name: str
-    crs: str  # e.g. "EPSG:32648" — target projected CRS for all spatial work
-    boundary: Optional[Path] = None  # GeoPackage / Shapefile / GeoJSON
-    output_dir: Path = Path("./output")
-    targets: list[Literal["swatplus", "swat"]] = Field(default=["swatplus"])
+    name: str = Field(
+        description="Project name, written to manifest.json and the QA report. Example: `MaDa_Basin_2026`.",
+    )
+    crs: str = Field(
+        description=(
+            "Target projected CRS for all spatial outputs (metres). Clipped rasters are reprojected to it. "
+            "Example: `EPSG:32648` (WGS 84 / UTM 48N) or `EPSG:3405` (VN-2000 / UTM 48N)."
+        ),
+    )
+    boundary: Optional[Path] = Field(
+        default=None,
+        description=(
+            "Basin outline (.shp, .gpkg, .geojson) with a CRS. When set, DEM, land use and soil are clipped "
+            "to it; it may be in another CRS than the rasters."
+        ),
+    )
+    output_dir: Path = Field(
+        default=Path("./output"),
+        description=(
+            "Folder that receives every output (spatial/, landuse/, soil/, weather/, observed/, "
+            "manifest.json). Relative paths are relative to the config file. Default `./output`."
+        ),
+    )
+    targets: list[Literal["swatplus", "swat"]] = Field(
+        default=["swatplus"],
+        description=(
+            "Model formats to write weather for: `swatplus` (SWAT+ .pcp/.tmp with .cli indexes) and/or `swat` "
+            "(SWAT 2012 text files). With both, each gets its own sub-folder."
+        ),
+    )
 
 
 class DEMConfig(BaseModel):
-    path: Path
-    output_name: str = "dem_projected.tif"  # clipped DEM written to <output_dir>/spatial/
-    clip: bool = True  # crop to project.boundary (needs boundary); False = whole raster
-    resampling: Literal["nearest", "bilinear", "cubic"] = "bilinear"  # when reprojected to project.crs
-    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
+    path: Path = Field(
+        description="Source DEM raster (GeoTIFF or ESRI grid). It may cover a much larger area than the basin.",
+    )
+    output_name: str = Field(
+        default="dem_projected.tif",
+        description=(
+            "File name of the clipped DEM, written to `output/spatial/`. Default `dem_projected.tif`. "
+            "Example: `dem_clip.tif`."
+        ),
+    )
+    clip: bool = Field(
+        default=True,
+        description=(
+            "Crop the DEM to project.boundary (needs a boundary). Off: keep the whole raster, only reproject "
+            "it."
+        ),
+    )
+    resampling: Literal["nearest", "bilinear", "cubic"] = Field(
+        default="bilinear",
+        description=(
+            "How cell values are recomputed when the DEM is reprojected or resampled: `bilinear` (default, "
+            "smooth) or `cubic`; `nearest` keeps the original values."
+        ),
+    )
+    resolution: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Output pixel size in project.crs units (metres). Empty = keep the source resolution. Example: "
+            "`30`."
+        ),
+    )
 
 
 class ClipItemConfig(BaseModel):
     """One raster to crop to project.boundary: read `src`, write `dst`."""
-    src: Path
-    dst: Path
-    mask: bool = False  # also set pixels outside the polygons to NoData
-    resampling: Literal["nearest", "bilinear", "cubic"] = "nearest"  # when reprojected to project.crs
-    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
+    src: Path = Field(
+        description="Raster to crop to project.boundary (any raster not covered by DEM, land use or soil).",
+    )
+    dst: Path = Field(
+        description=(
+            "Where the cropped raster is written. Relative paths are relative to the config file. Example: "
+            "`./output/extra/ndvi_clip.tif`."
+        ),
+    )
+    mask: bool = Field(
+        default=False,
+        description=(
+            "Also set the pixels outside the boundary polygons to NoData. Off: crop to the boundary's "
+            "bounding box only."
+        ),
+    )
+    resampling: Literal["nearest", "bilinear", "cubic"] = Field(
+        default="nearest",
+        description=(
+            "How cell values are recomputed when reprojected: `nearest` (default, keeps classes), `bilinear` "
+            "or `cubic` for continuous values."
+        ),
+    )
+    resolution: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Output pixel size in project.crs units. Empty = keep the source resolution.",
+    )
 
 
 class LandUseConfig(BaseModel):
-    raster: Path
-    lookup: Path  # CSV columns: source_code_col, swat_code_col, swat_name_col
-    source_code_col: str = "code"
-    swat_code_col: str = "swat_code"
-    swat_name_col: str = "swat_name"
-    output_name: str = "landuse_clip.tif"  # written to <output_dir>/landuse/
-    clip: bool = True  # crop to project.boundary and keep only the basin's classes
-    output_lookup: bool = True  # write landuse/landuse_vlookup.csv (LANDUSE_ID, SWAT_CODE)
-    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
+    raster: Path = Field(
+        description="Land-use raster with integer class codes (for example ESA WorldCover).",
+    )
+    lookup: Path = Field(
+        description="CSV that maps each raster code to a SWAT land-use code; its column names are set below.",
+    )
+    source_code_col: str = Field(
+        default="code",
+        description="Column of the lookup CSV with the raster codes. Default `code`. Example: `LANDUSE_ID`.",
+    )
+    swat_code_col: str = Field(
+        default="swat_code",
+        description="Column of the lookup CSV with the 4-letter SWAT codes (AGRL, FRST, …). Default `swat_code`.",
+    )
+    swat_name_col: str = Field(
+        default="swat_name",
+        description=(
+            "Column of the lookup CSV with the class names shown in reports and on the map. Default "
+            "`swat_name`; the code column may be reused."
+        ),
+    )
+    output_name: str = Field(
+        default="landuse_clip.tif",
+        description=(
+            "File name of the clipped land-use raster, written to `output/landuse/`. Default "
+            "`landuse_clip.tif`."
+        ),
+    )
+    clip: bool = Field(
+        default=True,
+        description="Crop to project.boundary and keep only the classes found in the basin.",
+    )
+    output_lookup: bool = Field(
+        default=True,
+        description="Write `landuse/landuse_vlookup.csv` (LANDUSE_ID, SWAT_CODE) for QSWAT / QSWAT+.",
+    )
+    resolution: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Output pixel size in project.crs units. Empty = keep the source resolution.",
+    )
 
 
 class SoilConfig(BaseModel):
-    raster: Path
-    table: Path  # CSV or SQLite with physical soil parameters
-    soil_key_col: str = "soil_id"
-    output_usersoil: bool = True
+    raster: Path = Field(
+        description="Soil raster with integer soil ids (for example HWSD `hdr.adf`).",
+    )
+    table: Path = Field(
+        description="CSV or SQLite with the physical parameters of each soil.",
+    )
+    soil_key_col: str = Field(
+        default="soil_id",
+        description="Column of the soil table that matches the raster values. Default `soil_id`. Example: `SOIL_ID`.",
+    )
+    output_usersoil: bool = Field(
+        default=True,
+        description="Write `soil/usersoil.csv` for the soils present in the basin.",
+    )
     # "swat": usersoil.csv in the 152-column SWAT+ layout (SWAT+ Editor example); "raw": input table as is
-    usersoil_format: Literal["swat", "raw"] = "swat"
-    output_name: str = "soil_clip.tif"  # written to <output_dir>/soil/
-    clip: bool = True  # crop to project.boundary and keep only the basin's soils
-    output_lookup: bool = True  # write soil/soil_vlookup.csv (SOIL_ID, SNAM)
-    resolution: Optional[float] = Field(default=None, gt=0)  # output pixel size (project.crs units)
+    usersoil_format: Literal["swat", "raw"] = Field(
+        default="swat",
+        description="`swat`: the 152-column SWAT+ usersoil layout; `raw`: the input table as is.",
+    )
+    output_name: str = Field(
+        default="soil_clip.tif",
+        description="File name of the clipped soil raster, written to `output/soil/`. Default `soil_clip.tif`.",
+    )
+    clip: bool = Field(
+        default=True,
+        description="Crop to project.boundary and keep only the soils found in the basin.",
+    )
+    output_lookup: bool = Field(
+        default=True,
+        description=(
+            "Write `soil/soil_vlookup.csv` (key column SOIL_ID for SWAT+, SEQN for SWAT 2012, and SNAM) for "
+            "QSWAT / QSWAT+."
+        ),
+    )
+    resolution: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Output pixel size in project.crs units. Empty = keep the source resolution.",
+    )
 
 
 class WeatherUnitsConfig(BaseModel):
-    precip: str = "mm"
-    temperature: str = "degC"
+    precip: str = Field(
+        default="mm",
+        description="Unit of the precipitation values in the station files. Default `mm`.",
+    )
+    temperature: str = Field(
+        default="degC",
+        description="Unit of the temperature values in the station files. Default `degC`.",
+    )
 
 
 class WeatherSourceConfig(BaseModel):
     """Per-variable-group station source (optional override)."""
-    stations: Path  # CSV: id, name, lat, lon, elev
-    data_dir: Path  # directory; one CSV per station
-    file_pattern: str = "{id}.csv"  # e.g. "{name}.csv" to match by station name
+    stations: Path = Field(
+        description=(
+            "Station table of this source: columns id, name, lat, lon, elev in any case "
+            "(ID,NAME,LAT,LONG,ELEV also works)."
+        ),
+    )
+    data_dir: Path = Field(
+        description="Folder with one CSV per station (columns date and the variables).",
+    )
+    file_pattern: str = Field(
+        default="{id}.csv",
+        description="Name of each station file: `{id}.csv` (default) or `{name}.csv` to match by station name.",
+    )
 
 class FillCSVConfig(BaseModel):
-    stations: Path
-    data_dir: Path
-    file_pattern: str = "{id}.csv"
+    stations: Path = Field(
+        description="Station table of the fill source (same columns as the observed stations).",
+    )
+    data_dir: Path = Field(
+        description="Folder with one CSV per station of the fill source.",
+    )
+    file_pattern: str = Field(
+        default="{id}.csv",
+        description="Name of each fill-source file: `{id}.csv` (default) or `{name}.csv`.",
+    )
 
 class FillNetCDFConfig(BaseModel):
-    path: Path
-    var_map: dict[str, str]
-    lat_name: str = "auto"
-    lon_name: str = "auto"
-    time_name: str = "auto"
-    search_radius: int = Field(default=1, ge=0, le=5)  # ô lân cận nếu ô gần nhất không có dữ liệu
+    path: Path = Field(
+        description="Daily gridded NetCDF file. Example: `OBS.Vietnam.1980-2014.nc`.",
+    )
+    var_map: dict[str, str] = Field(
+        description=(
+            "Which variable of the NetCDF holds each swatprep variable. Example: precip → `pr`, tmax → "
+            "`tasmax`, tmin → `tasmin`. List the names with `xarray.open_dataset(path)`."
+        ),
+    )
+    lat_name: str = Field(
+        default="auto",
+        description="Name of the latitude axis in the NetCDF; `auto` finds lat / latitude / y.",
+    )
+    lon_name: str = Field(
+        default="auto",
+        description="Name of the longitude axis in the NetCDF; `auto` finds lon / longitude / x.",
+    )
+    time_name: str = Field(
+        default="auto",
+        description="Name of the time axis in the NetCDF; `auto` finds it.",
+    )
+    search_radius: int = Field(
+        default=1,
+        ge=0,
+        le=5,
+        description="If the nearest cell has no data, look this many cells around it (0–5). Default `1`.",
+    )
 
     @model_validator(mode="after")
     def validate_var_map(self) -> "FillNetCDFConfig":
@@ -110,12 +290,64 @@ class FillNetCDFConfig(BaseModel):
         return self
 
 class WeatherFillConfig(BaseModel):
-    type: Literal["csv", "netcdf"] = "csv"
-    output_dir: Optional[Path] = None
-    min_overlap_days: int = Field(default=10, ge=0)
-    run_in_build: bool = False  # True: `build` fills the gaps first (needs output_dir), then builds from the result
-    csv: Optional[FillCSVConfig] = None
-    netcdf: Optional[FillNetCDFConfig] = None
+    type: Literal["csv", "netcdf"] = Field(
+        default="csv",
+        description=(
+            "Source used to fill the gaps: `csv` (other stations' files) or `netcdf` (a daily grid; the "
+            "nearest cell with data is used)."
+        ),
+    )
+    output_dir: Optional[Path] = Field(
+        default=None,
+        description=(
+            "Folder for the filled station files, stations.csv and fill_report.csv. Must differ from Data "
+            "folder. Example: `./filled`."
+        ),
+    )
+    min_overlap_days: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "Days on which both the station and the fill source have values. Fewer than this: the gap is "
+            "still filled but flagged low confidence. Default `10`."
+        ),
+    )
+    run_in_build: bool = Field(
+        default=False,
+        description=(
+            "Build fills the gaps first (into Output folder of Fill) and then builds the weather files from "
+            "the filled data."
+        ),
+    )
+    fill_ungauged: bool = Field(
+        default=False,
+        description=(
+            "Also fill stations with no observed day at all (or no data file): every day comes from the fill "
+            "source. Use it for virtual stations placed where there is no gauge."
+        ),
+    )
+    correct_ungauged: bool = Field(
+        default=True,
+        description=(
+            "For those stations, apply the bias correction of the nearest gauged station (same variable) "
+            "within Max borrow distance; off, or no such station: raw fill-source values."
+        ),
+    )
+    max_borrow_km: float = Field(
+        default=50,
+        gt=0,
+        description=(
+            "Largest distance (km) to the gauged station whose correction is borrowed. Default `50`."
+        ),
+    )
+    csv: Optional[FillCSVConfig] = Field(
+        default=None,
+        description="Station files used as the fill source.",
+    )
+    netcdf: Optional[FillNetCDFConfig] = Field(
+        default=None,
+        description="Daily gridded NetCDF used as the fill source (precipitation in mm, temperature in degC).",
+    )
 
     @model_validator(mode="after")
     def validate_block_matches_type(self) -> "WeatherFillConfig":
@@ -128,20 +360,64 @@ class WeatherFillConfig(BaseModel):
 
 
 class WeatherConfig(BaseModel):
-    stations: Optional[Path] = None   # CSV: id, name, lat, lon, elev (default for all)
-    data_dir: Optional[Path] = None   # directory; one CSV per station (default for all)
-    precip: Optional[WeatherSourceConfig] = None      # override for precip
-    temp: Optional[WeatherSourceConfig] = None         # override for tmax/tmin
-    file_pattern: str = "{id}.csv"  # e.g. "{name}.csv" to match by station name
-    format: Literal["csv"] = "csv"
-    variables: list[
-        Literal["precip", "tmax", "tmin", "wind", "solar", "humidity"]
-    ] = Field(default=["precip", "tmax", "tmin"])
-    start: date  # ISO "YYYY-MM-DD"
-    end: date    # ISO "YYYY-MM-DD"
-    units: WeatherUnitsConfig = Field(default_factory=WeatherUnitsConfig)
-    missing_policy: Literal["fail", "warn"] = "fail"
-    fill: Optional[WeatherFillConfig] = None  # chỉ dùng cho `swatprep fill weather`
+    stations: Optional[Path] = Field(
+        default=None,
+        description=(
+            "Station table: columns id, name, lat, lon, elev in any case (ID,NAME,LAT,LONG,ELEV also works); "
+            "a .txt is fine if it is CSV. Used for all variables unless a separate source is set."
+        ),
+    )
+    data_dir: Optional[Path] = Field(
+        default=None,
+        description=(
+            "Folder with one CSV per station: a `date` column and one column per variable (precip, tmax, "
+            "tmin, …)."
+        ),
+    )
+    precip: Optional[WeatherSourceConfig] = Field(
+        default=None,
+        description="A separate station network for precipitation (its own stations file and folder).",
+    )
+    temp: Optional[WeatherSourceConfig] = Field(
+        default=None,
+        description="A separate station network for tmax / tmin.",
+    )
+    file_pattern: str = Field(
+        default="{id}.csv",
+        description="Name of each station file: `{id}.csv` (default) or `{name}.csv` to match by station name.",
+    )
+    format: Literal["csv"] = Field(
+        default="csv",
+        description="Format of the station files. Only `csv` for now.",
+    )
+    variables: list[ Literal["precip", "tmax", "tmin", "wind", "solar", "humidity"] ] = Field(
+        default=["precip", "tmax", "tmin"],
+        description="Variables to read and write. Default precip, tmax, tmin; wind, solar and humidity are optional.",
+    )
+    start: date = Field(
+        description="First day of the period (YYYY-MM-DD). Days without data in the period count as missing.",
+    )
+    end: date = Field(
+        description="Last day of the period (YYYY-MM-DD); on or after Start.",
+    )
+    units: WeatherUnitsConfig = Field(
+        default_factory=WeatherUnitsConfig,
+        description="Units of the values in the station files.",
+    )
+    missing_policy: Literal["fail", "warn"] = Field(
+        default="fail",
+        description=(
+            "What Build does when a station has missing days: `fail` stops with an error, `warn` writes the "
+            "files with -99 for the missing days. Fill the gaps first with Fill missing values."
+        ),
+    )
+    fill: Optional[WeatherFillConfig] = Field(
+        default=None,
+        description=(
+            "Fill missing days from another source (station CSVs or a gridded NetCDF), bias-corrected per "
+            "station."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_date_range(self) -> "WeatherConfig":
@@ -182,16 +458,48 @@ class WeatherConfig(BaseModel):
 
 
 class StreamflowConfig(BaseModel):
-    path: Path  # long CSV, or (format per_station) one station file / a folder of them
+    path: Path = Field(
+        description=(
+            "Observed discharge: one long CSV (format long), or one station file / a folder of station files "
+            "(format per_station)."
+        ),
+    )
     # long: one file, a row per day and station. per_station: each file is one station
     # (columns date + one flow column); the station id is the file name without extension.
-    format: Literal["long", "per_station"] = "long"
-    glob: str = "Q_*.csv"  # per_station + folder: which files to read
-    stations: Optional[list[str]] = None  # keep only these station ids (default: all found)
-    date_col: str = "date"
-    station_id_col: str = "station_id"
-    value_col: str = "flow"  # per_station: flow column in the files (auto if the file has just one)
-    units: Literal["m3s", "mm"] = "m3s"
+    format: Literal["long", "per_station"] = Field(
+        default="long",
+        description=(
+            "`long`: one file with a row per day and station; `per_station`: each file is one station (date + "
+            "discharge), its id is the file name."
+        ),
+    )
+    glob: str = Field(
+        default="Q_*.csv",
+        description="per_station with a folder: which files to read. Default `Q_*.csv`.",
+    )
+    stations: Optional[list[str]] = Field(
+        default=None,
+        description="Keep only these station ids (comma-separated). Empty = all stations found.",
+    )
+    date_col: str = Field(
+        default="date",
+        description="Date column. Default `date`.",
+    )
+    station_id_col: str = Field(
+        default="station_id",
+        description="Station id column (format long). Default `station_id`.",
+    )
+    value_col: str = Field(
+        default="flow",
+        description=(
+            "Discharge column. Default `flow`; per_station files with a single value column are read "
+            "automatically."
+        ),
+    )
+    units: Literal["m3s", "mm"] = Field(
+        default="m3s",
+        description="Unit of the discharge values: `m3s` (m³/s) or `mm` (runoff depth).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -200,13 +508,34 @@ class StreamflowConfig(BaseModel):
 
 
 class SWATPrepConfig(BaseModel):
-    project: ProjectConfig
-    clip: Optional[list[ClipItemConfig]] = Field(default=None, min_length=1)
-    dem: Optional[DEMConfig] = None
-    landuse: Optional[LandUseConfig] = None
-    soil: Optional[SoilConfig] = None
-    weather: Optional[WeatherConfig] = None
-    streamflow: Optional[StreamflowConfig] = None
+    project: ProjectConfig = Field(
+        description="Project settings: name, CRS, boundary and output folder.",
+    )
+    clip: Optional[list[ClipItemConfig]] = Field(
+        default=None,
+        min_length=1,
+        description="Extra rasters to crop to the boundary.",
+    )
+    dem: Optional[DEMConfig] = Field(
+        default=None,
+        description="Digital elevation model.",
+    )
+    landuse: Optional[LandUseConfig] = Field(
+        default=None,
+        description="Land-use raster and its lookup to SWAT codes.",
+    )
+    soil: Optional[SoilConfig] = Field(
+        default=None,
+        description="Soil raster and soil parameter table.",
+    )
+    weather: Optional[WeatherConfig] = Field(
+        default=None,
+        description="Daily weather station data and gap filling.",
+    )
+    streamflow: Optional[StreamflowConfig] = Field(
+        default=None,
+        description="Observed discharge for calibration.",
+    )
 
     @model_validator(mode="after")
     def clip_needs_boundary(self) -> "SWATPrepConfig":
