@@ -10,6 +10,7 @@ from app.services.projects import ProjectError, create_project, list_configs
 from app.services.recent import add_recent, load_recent
 from app.ui.browse import browse_dialog
 from app.ui.fields import crs_select
+from swatprep.config import ProjectConfig
 
 
 def open_project(folder: Path) -> None:
@@ -81,11 +82,13 @@ def render_home(roots: dict[str, Path]) -> None:
         with st.container(border=True):
             st.subheader("New project")
             path_col, browse_col = st.columns([3, 1], vertical_alignment="bottom")
-            path_col.text_input("Folder", key="home_new_dir", placeholder="A new or empty folder, e.g. D:\\Basin\\SeSan")
+            path_col.text_input("Folder", key="home_new_dir", placeholder="A new or empty folder, e.g. D:\\Basin\\SeSan",
+                                help="Created if it does not exist, with a first config.yaml inside.")
             if browse_col.button("Browse", icon=":material/folder_open:", key="home_new_browse", width="stretch"):
                 browse_dialog("home_new_dir", roots, pick="output")
-            st.text_input("Project name", key="home_new_name", placeholder="Defaults to the folder name")
-            crs_select("CRS", key="home_new_crs")
+            st.text_input("Project name", key="home_new_name", placeholder="Defaults to the folder name",
+                          help=ProjectConfig.model_fields["name"].description)
+            crs_select("CRS", key="home_new_crs", help=ProjectConfig.model_fields["crs"].description)
             st.button("Create", icon=":material/add:", key="home_create", on_click=_create)
             if state.get("home_new_error"):
                 st.error(state["home_new_error"], icon=":material/error:")

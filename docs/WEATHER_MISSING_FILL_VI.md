@@ -133,6 +133,7 @@ nhân hệ số cho đại lượng không âm như mưa, cộng độ lệch ch
 | Không hiệu chỉnh theo tháng hay mùa | Chỉ một hệ số cho cả giai đoạn trùng; mưa nhiều mùa rõ rệt có thể cần kiểm tra thêm |
 | Không giới hạn miền giá trị ngoài việc mưa không âm | Độ ẩm, bức xạ, gió dùng độ lệch và **có thể ra ngoài miền hợp lý** (vd độ ẩm > 1, gió < 0); hãy kiểm tra các biến này |
 | Không tạo trạm mới | Chỉ điền cho trạm có trong `weather.stations` |
+| Mặc định không điền trạm không có ngày đo nào | Không có ngày trùng nên không có hệ số; bật `fill_ungauged` để điền trạm ảo (mục 6) |
 | Không tự chọn trạm lân cận nếu không có nguồn | Báo `no_fill_source`, ngày thiếu giữ nguyên |
 
 ### 4.4 Chọn ô lưới (với NetCDF)
@@ -206,6 +207,9 @@ quyết định giai đoạn được đọc, được điền và được ghi.
 | `type` | `csv` | Loại nguồn điền. Phải có khối `csv:` hoặc `netcdf:` tương ứng, nếu không YAML bị từ chối |
 | `output_dir` | không | Thư mục ghi kết quả. Có thể thay bằng đối số `OUT_DIR` của lệnh |
 | `min_overlap_days` | `10` | Nếu số ngày trùng **ít hơn** giá trị này, chỉ **phát cảnh báo** `low_confidence`; **việc điền vẫn được thực hiện**. Hệ số tính trên quá ít ngày có thể lệch nhiều |
+| `fill_ungauged` | `false` | `true`: trạm không có ngày đo nào (trạm ảo, hoặc không có file số liệu) được điền **toàn bộ** từ nguồn điền, trạng thái `warn` |
+| `correct_ungauged` | `true` | Trạm ảo dùng hệ số của trạm có đo gần nhất (cùng biến, hệ số `pass`) trong `max_borrow_km`; `false` hoặc không có trạm đủ gần: giá trị thô. Báo cáo ghi `correction_from`, `distance_km` |
+| `max_borrow_km` | `50` | Bán kính (km) tìm trạm cho mượn hệ số |
 | `netcdf.path` | bắt buộc | File NetCDF lưới theo **ngày**, mưa mm, nhiệt độ °C |
 | `netcdf.var_map` | bắt buộc | Tên biến `swatprep` → tên biến trong file. Khoá hợp lệ: `precip, tmax, tmin, wind, solar, humidity` |
 | `netcdf.lat_name`, `lon_name`, `time_name` | `auto` | Chỉ đặt khi tên trục không thuộc nhóm thông dụng (`lat/latitude/y`, `lon/longitude/x`, `time/date`) |

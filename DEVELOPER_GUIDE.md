@@ -1517,7 +1517,9 @@ Phụ thuộc một chiều: `pages -> ui -> services -> swatprep`. Lõi `swatpr
 
 ### Thêm một trường cấu hình mới
 
-1. Thêm trường vào model trong `swatprep/config.py` (kèm test của lõi).
+1. Thêm trường vào model trong `swatprep/config.py` (kèm test của lõi), dạng `Field(..., description="...")`:
+   mô tả bằng tiếng Anh, một đến ba câu (ô này là gì, giá trị hợp lệ / mặc định, ví dụ). Mô tả hiện ở ⓘ và khi
+   bật **Show help**; `test_every_form_field_has_a_description` báo lỗi nếu thiếu.
 2. Thêm tên trường vào `LAYOUT[<Model>]` trong `app/services/form_layout.py`, đúng vị trí muốn hiển thị.
    Nếu là `Path`, khai báo `PATH_KINDS` khi nó là thư mục (`dir`), tệp hoặc thư mục (`file_or_dir`) hay
    đầu ra (`output`). Nhãn đẹp hơn tên trường: thêm vào `LABELS`.

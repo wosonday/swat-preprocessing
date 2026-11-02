@@ -523,3 +523,182 @@ class TestCLIFillWeather:
         assert res.exception is None or isinstance(res.exception, SystemExit)
         assert "Config schema error" in res.output
         assert "weather.end must be on or after weather.start" in res.output
+
+
+# ---------------------------------------------------------------------------
+# Virtual (ungauged) stations: no observed day at all
+# ---------------------------------------------------------------------------
+
+_DATES = ["2000-01-01", "2000-01-02", "2000-01-03", "2000-01-04"]
+_KM_PER_DEG_LON_15N = 107.53   # 111.32 km * cos(15 deg)
+
+
+def _virtual_setup(tmp_path, km: float, var: str = "precip", v1_file: bool = True):
+    """G1 gauged at (15, 105); V1 `km` east of it with no observed value. The fill source
+    is 1, 2, 3, 4 at both; G1 observed 2, 4, 6, 8 (ratio 2.0) or 2, 3, 4, 5 (offset +1.0)."""
+    from swatprep.config import WeatherConfig
+
+    lon_v1 = 105.0 + km / _KM_PER_DEG_LON_15N
+    rows = [{"id": "G1", **_META}, {"id": "V1", **_META, "name": "Virtual", "lon": lon_v1}]
+    real_sta = _write_stations_csv(tmp_path, "real_stations.csv", rows)
+    fill_sta = _write_stations_csv(tmp_path, "fill_stations.csv", rows)
+    real_dir, fill_dir = tmp_path / "real", tmp_path / "fill"
+    real_dir.mkdir()
+    fill_dir.mkdir()
+    observed = [2.0, 4.0, 6.0, 8.0] if var == "precip" else [2.0, 3.0, 4.0, 5.0]
+    # one missing day at G1 so it is filled too; the overlap is the other three days
+    _write_station_csv(real_dir, "G1", _DATES, **{var: [*observed[:3], None]})
+    if v1_file:
+        _write_station_csv(real_dir, "V1", _DATES, **{var: [None] * 4})
+    for sid in ("G1", "V1"):
+        _write_station_csv(fill_dir, sid, _DATES, **{var: [1.0, 2.0, 3.0, 4.0]})
+
+    def cfg(sta, d):
+        return WeatherConfig(stations=sta, data_dir=d, variables=[var], start=_DATES[0], end=_DATES[-1],
+                             missing_policy="warn")
+    return cfg(real_sta, real_dir), cfg(fill_sta, fill_dir)
+
+
+def _row(result, sid, var="precip"):
+    rep = result.report
+    return rep[(rep["station_id"] == sid) & (rep["variable"] == var)].iloc[0]
+
+
+class TestVirtualStations:
+    def _run(self, tmp_path, km, var="precip", **kw):
+        from swatprep.core.weather_fill import WeatherGapFiller
+
+        real_cfg, fill_cfg = _virtual_setup(tmp_path, km, var, kw.pop("v1_file", True))
+        return WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=1, fill_ungauged=True, **kw).run()
+
+    def test_near_station_borrows_the_precip_ratio(self, tmp_path):
+        result = self._run(tmp_path, km=10)
+        assert list(result.daily["precip"]["V1"]) == pytest.approx([2.0, 4.0, 6.0, 8.0])
+        row = _row(result, "V1")
+        assert row["correction_type"] == "ratio"
+        assert row["correction_value"] == pytest.approx(2.0)
+        assert row["correction_from"] == "G1"
+        assert row["distance_km"] == pytest.approx(10.0, abs=0.1)
+        assert row["n_filled"] == 4 and row["n_still_missing"] == 0
+        assert row["status"] == "warn"
+        assert any("V1" in c.message and "G1" in c.message and "km" in c.message for c in result.qa)
+
+    def test_near_station_borrows_the_temperature_offset(self, tmp_path):
+        result = self._run(tmp_path, km=10, var="tmax")
+        assert list(result.daily["tmax"]["V1"]) == pytest.approx([2.0, 3.0, 4.0, 5.0])
+        assert _row(result, "V1", "tmax")["correction_type"] == "offset"
+
+    def test_far_station_gets_raw_source_values(self, tmp_path):
+        result = self._run(tmp_path, km=80)
+        assert list(result.daily["precip"]["V1"]) == pytest.approx([1.0, 2.0, 3.0, 4.0])
+        row = _row(result, "V1")
+        assert row["correction_type"] == "none"
+        assert pd.isna(row["correction_from"])
+        assert any("raw" in c.message and "V1" in c.message for c in result.qa)
+
+    def test_max_borrow_km_is_configurable(self, tmp_path):
+        result = self._run(tmp_path, km=80, max_borrow_km=100)
+        assert _row(result, "V1")["correction_from"] == "G1"
+
+    def test_correction_off_gives_raw_values_even_when_near(self, tmp_path):
+        result = self._run(tmp_path, km=10, correct_ungauged=False)
+        assert list(result.daily["precip"]["V1"]) == pytest.approx([1.0, 2.0, 3.0, 4.0])
+        assert _row(result, "V1")["correction_type"] == "none"
+
+    def test_station_without_a_data_file_is_filled(self, tmp_path):
+        result = self._run(tmp_path, km=10, v1_file=False)
+        assert list(result.daily["precip"]["V1"]) == pytest.approx([2.0, 4.0, 6.0, 8.0])
+
+    def test_gauged_station_keeps_its_own_correction(self, tmp_path):
+        result = self._run(tmp_path, km=10)
+        row = _row(result, "G1")
+        assert row["correction_value"] == pytest.approx(2.0)
+        assert pd.isna(row["correction_from"])
+        assert result.daily["precip"]["G1"].iloc[3] == pytest.approx(8.0)
+
+    def test_flag_off_keeps_the_old_behaviour(self, tmp_path):
+        from swatprep.core.weather_fill import WeatherGapFiller
+
+        real_cfg, fill_cfg = _virtual_setup(tmp_path, km=10)
+        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=1).run()
+        assert result.daily["precip"]["V1"].isna().all()
+        assert _row(result, "V1")["n_filled"] == 0
+
+    def test_only_a_donor_with_the_same_variable_is_used(self, tmp_path):
+        from swatprep.config import WeatherConfig
+        from swatprep.core.weather_fill import WeatherGapFiller
+
+        rows = [{"id": "G1", **_META}, {"id": "V1", **_META, "lon": 105.05}]
+        sta = _write_stations_csv(tmp_path, "stations.csv", rows)
+        real_dir, fill_dir = tmp_path / "real", tmp_path / "fill"
+        real_dir.mkdir()
+        fill_dir.mkdir()
+        # G1 has temperature only (precip empty): no precip ratio to lend
+        _write_station_csv(real_dir, "G1", _DATES, precip=[None] * 4, tmax=[2.0, 3.0, 4.0, None])
+        _write_station_csv(real_dir, "V1", _DATES, precip=[None] * 4, tmax=[None] * 4)
+        for sid in ("G1", "V1"):
+            _write_station_csv(fill_dir, sid, _DATES, precip=[1.0, 2.0, 3.0, 4.0], tmax=[1.0, 2.0, 3.0, 4.0])
+        def cfg(d):
+            return WeatherConfig(stations=sta, data_dir=d, variables=["precip", "tmax"],
+                                 start=_DATES[0], end=_DATES[-1], missing_policy="warn")
+
+        result = WeatherGapFiller(cfg(real_dir), cfg(fill_dir), min_overlap_days=1, fill_ungauged=True).run()
+
+        assert _row(result, "V1", "tmax")["correction_from"] == "G1"
+        precip = _row(result, "V1", "precip")
+        assert precip["correction_type"] == "none" and pd.isna(precip["correction_from"])
+        # G1 has no precip either: it is ungauged for precip and filled the same way
+        assert _row(result, "G1", "precip")["correction_type"] == "none"
+
+    def test_report_always_has_the_borrow_columns(self, tmp_path):
+        from swatprep.core.weather_fill import WeatherGapFiller
+
+        real_cfg, fill_cfg = _virtual_setup(tmp_path, km=10)
+        result = WeatherGapFiller(real_cfg, fill_cfg, min_overlap_days=1).run()
+        assert {"correction_from", "distance_km"} <= set(result.report.columns)
+
+
+class TestVirtualStationsConfig:
+    def test_defaults(self):
+        from swatprep.config import WeatherFillConfig
+
+        cfg = WeatherFillConfig(type="csv", csv={"stations": "s.csv", "data_dir": "d"})
+        assert (cfg.fill_ungauged, cfg.correct_ungauged, cfg.max_borrow_km) == (False, True, 50)
+
+    def test_max_borrow_km_must_be_positive(self):
+        from pydantic import ValidationError
+
+        from swatprep.config import WeatherFillConfig
+
+        with pytest.raises(ValidationError):
+            WeatherFillConfig(type="csv", csv={"stations": "s.csv", "data_dir": "d"}, max_borrow_km=0)
+
+    def test_cli_flags_fill_a_virtual_station(self, tmp_path):
+        from click.testing import CliRunner
+
+        from swatprep.cli import main
+
+        real_cfg, fill_cfg = _virtual_setup(tmp_path, km=80)
+        out = tmp_path / "out"
+        base = ["fill", "weather", "--stations", str(real_cfg.stations), "--data-dir", str(real_cfg.data_dir),
+                "--fill-stations", str(fill_cfg.stations), "--fill-data-dir", str(fill_cfg.data_dir),
+                "--variables", "precip", "--start", _DATES[0], "--end", _DATES[-1], "--min-overlap-days", "1"]
+        res = CliRunner().invoke(main, [*base, "--fill-ungauged", "--max-borrow-km", "100", str(out)])
+        assert res.exit_code == 0, res.output
+        assert list(pd.read_csv(out / "V1.csv")["precip"]) == pytest.approx([2.0, 4.0, 6.0, 8.0])
+
+        res = CliRunner().invoke(main, [*base, "--fill-ungauged", "--no-correct-ungauged", str(out)])
+        assert res.exit_code == 0, res.output
+        assert list(pd.read_csv(out / "V1.csv")["precip"]) == pytest.approx([1.0, 2.0, 3.0, 4.0])
+
+    def test_yaml_fields_reach_the_filler(self, tmp_path):
+        from swatprep.fill_setup import resolve_fill_inputs
+
+        real_cfg, fill_cfg = _virtual_setup(tmp_path, km=10)
+        inputs = resolve_fill_inputs({
+            "stations": real_cfg.stations, "data_dir": real_cfg.data_dir, "variables": "precip",
+            "start": _DATES[0], "end": _DATES[-1], "fill_stations": fill_cfg.stations,
+            "fill_data_dir": fill_cfg.data_dir, "out_dir": tmp_path / "out",
+            "fill_ungauged": True, "correct_ungauged": False, "max_borrow_km": 20.0,
+        })
+        assert (inputs.fill_ungauged, inputs.correct_ungauged, inputs.max_borrow_km) == (True, False, 20.0)

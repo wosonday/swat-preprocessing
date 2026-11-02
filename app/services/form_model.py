@@ -33,6 +33,7 @@ class FieldSpec:
     max_value: float | None = None  # from le
     exclusive_min: bool = False  # True when the bound came from gt
     nested: type[BaseModel] | None = None
+    help: str | None = None  # the field's description in swatprep.config, shown as ⓘ and with Show help
 
 
 def _unwrap_optional(annotation: Any) -> tuple[Any, bool]:
@@ -103,7 +104,7 @@ def field_spec(model: type[BaseModel], name: str) -> FieldSpec:
             bounds["max_value"] = meta.le
 
     return FieldSpec(name=name, kind=kind, required=info.is_required(), optional=optional,
-                     default=default, **extra, **bounds)
+                     default=default, help=info.description, **extra, **bounds)
 
 
 def humanize(name: str) -> str:

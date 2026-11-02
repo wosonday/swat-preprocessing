@@ -166,3 +166,21 @@ def test_empty_variable_map_still_has_its_columns(monkeypatch, example_project, 
     at = open_project(AppTest.from_file(PAGE, default_timeout=60).run(), example_project.parent)
     table = next(e.value for e in at.get("dataframe") if e.key == "f::weather.fill.netcdf.var_map")
     assert list(table.columns) == ["variable", "name"] and table.empty
+
+
+def test_every_field_has_an_info_tooltip(page):
+    assert page.text_input(key="f::dem.output_name").help.startswith("File name of the clipped DEM")
+    assert page.selectbox(key="f::project.crs").help.startswith("Target projected CRS")
+    assert page.selectbox(key="f::weather.missing_policy").help.startswith("What Build does")
+
+
+def test_show_help_writes_the_descriptions_under_the_fields(page):
+    def shown():
+        return [c.value for c in page.main.caption if c.value.startswith("File name of the clipped DEM")]
+
+    assert shown() == []
+    page.toggle(key="show_help").set_value(True).run()
+    assert not page.exception and shown()
+    assert any(m.value.startswith("Digital elevation model") for m in page.main.caption)   # section intro
+    page.toggle(key="show_help").set_value(False).run()
+    assert shown() == []

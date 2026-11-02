@@ -88,6 +88,9 @@ weather:
     type: "netcdf"                  # = csv | netcdf
     output_dir: "./data/filled"
     min_overlap_days: 365           # = 10; ít ngày trùng hơn mức này thì CẢNH BÁO low_confidence (vẫn điền)
+    fill_ungauged: false            # = false; true: trạm KHÔNG có ngày đo nào (trạm ảo) được điền toàn bộ từ nguồn
+    correct_ungauged: true          # = true; mượn hệ số hiệu chỉnh của trạm có đo gần nhất (cùng biến); false: giá trị thô
+    max_borrow_km: 50               # = 50; chỉ mượn khi trạm đó cách trong bán kính này (km)
     netcdf:
       path: "./data/grid_1980_2014.nc"   # lưới NGÀY, mưa mm, nhiệt độ degC
       var_map: { precip: pr, tmax: tasmax, tmin: tasmin }   # tên biến swatprep -> tên biến trong .nc

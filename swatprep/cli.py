@@ -440,6 +440,12 @@ def fill() -> None:
 @click.option("--end", default=None, help="ISO end date (YYYY-MM-DD).")
 @click.option("--min-overlap-days", default=None, type=int,
               help="Minimum overlapping days needed to trust a bias correction [10].")
+@click.option("--fill-ungauged/--no-fill-ungauged", "fill_ungauged", default=None,
+              help="Also fill stations with no observed day (virtual stations) entirely from the source [off].")
+@click.option("--correct-ungauged/--no-correct-ungauged", "correct_ungauged", default=None,
+              help="Correct those stations with the nearest gauged station's correction [on].")
+@click.option("--max-borrow-km", type=click.FloatRange(min=0, min_open=True), default=None,
+              help="Largest distance (km) to the gauged station whose correction is borrowed [50].")
 @click.argument("out_dir", type=click.Path(path_type=Path), required=False)
 def fill_weather(out_dir: Path | None, **options) -> None:
     """Fill missing days in observed weather station data from an external
@@ -455,9 +461,7 @@ def fill_weather(out_dir: Path | None, **options) -> None:
         from .writers.weather_fill import WeatherFillWriter
 
         inputs = resolve_fill_inputs({**options, "out_dir": out_dir})
-        result = WeatherGapFiller(
-            inputs.real_cfg, inputs.fill_source, min_overlap_days=inputs.min_overlap_days,
-        ).run()
+        result = WeatherGapFiller(inputs.real_cfg, inputs.fill_source, **inputs.filler_options()).run()
 
         for c in result.qa:
             symbol = {"pass": "v", "warn": "!", "fail": "x"}[c.status]
