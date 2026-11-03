@@ -84,24 +84,42 @@ def _labels(lookup: Path | None) -> dict[int, str]:
     return {int(code): str(label) for code, label in zip(table.iloc[:, 0], table.iloc[:, 1])}
 
 
-def _scan(src, categorical: bool) -> tuple[int, int, dict[int, int], float, float]:
-    """Full-resolution pass by blocks: total pixels, valid pixels, class counts, min, max."""
-    total = valid = 0
-    counts: dict[int, int] = {}
-    lo, hi = math.inf, -math.inf
-    for _, window in src.block_windows(1):
-        block = src.read(1, window=window, masked=True)
-        data = block.compressed()
-        total += block.size
-        valid += data.size
-        if not data.size:
-            continue
+def _stored(src, categorical: bool) -> tuple[int, int, dict[int, int], float, float] | None:
+    """The statistics Build keeps in the GeoTIFF (GDAL STATISTICS_* tags, class counts): exact and free."""
+    import json
+
+    from swatprep.utils.raster import CLASS_COUNTS_TAG
+
+    tags = src.tags(1)
+    try:
+        total = src.width * src.height
         if categorical:
-            for code, n in zip(*np.unique(data, return_counts=True)):
-                counts[int(code)] = counts.get(int(code), 0) + int(n)
-        else:
-            lo, hi = min(lo, float(data.min())), max(hi, float(data.max()))
-    return total, valid, counts, lo, hi
+            counts = {int(code): int(n) for code, n in json.loads(tags[CLASS_COUNTS_TAG]).items()}
+            return total, sum(counts.values()), counts, math.inf, -math.inf
+        valid = round(total * float(tags["STATISTICS_VALID_PERCENT"]) / 100)
+        return total, valid, {}, float(tags["STATISTICS_MINIMUM"]), float(tags["STATISTICS_MAXIMUM"])
+    except (KeyError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def _scan(src, categorical: bool, preview: np.ndarray) -> tuple[int, int, dict[int, int], float, float]:
+    """Total pixels, valid pixels, class counts, min, max, for a raster without stored statistics.
+
+    Categorical: exact counts over every pixel (a small class must stay in the legend), with the fast
+    exact counter of the core. Continuous: from the `preview` already read (NaN = NoData), so no second
+    pass over the full raster; exact when the preview is full resolution, approximate otherwise.
+    """
+    from swatprep.utils.raster import class_counts
+
+    total = src.width * src.height
+    if categorical:
+        counts = {int(code): int(n) for code, n in class_counts(src).items()}
+        return total, sum(counts.values()), counts, math.inf, -math.inf
+    ok = ~np.isnan(preview)
+    if not ok.any():
+        return total, 0, {}, math.inf, -math.inf
+    valid = round(total * float(ok.mean()))
+    return total, valid, {}, float(preview[ok].min()), float(preview[ok].max())
 
 
 def render_layer(layer: Layer, max_px: int = 1024) -> LayerView:
@@ -111,10 +129,12 @@ def render_layer(layer: Layer, max_px: int = 1024) -> LayerView:
     from rasterio.enums import Resampling
     from rasterio.warp import calculate_default_transform, reproject, transform_bounds
 
+    from swatprep.utils.raster import gdal_env
+
     categorical = layer.kind == "categorical"
     resampling = Resampling.nearest if categorical else Resampling.bilinear
     try:
-        with rasterio.open(layer.path) as src:
+        with gdal_env(), rasterio.open(layer.path) as src:
             if src.crs is None:
                 return LayerView(error=f"{layer.name}: layer has no CRS, so it cannot be placed on the map.")
             scale = max(src.width, src.height) / max_px
@@ -126,10 +146,12 @@ def render_layer(layer: Layer, max_px: int = 1024) -> LayerView:
             warped = np.full((dh, dw), np.nan)
             reproject(small, warped, src_transform=small_transform, src_crs=src.crs, src_nodata=np.nan,
                       dst_transform=dst_transform, dst_crs=MAP_CRS, dst_nodata=np.nan, resampling=resampling)
-            total, valid, counts, lo, hi = _scan(src, categorical)
+            stored = _stored(src, categorical)
+            total, valid, counts, lo, hi = stored or _scan(src, categorical, small)
+            approx = "≈ " if not stored and not categorical and (h, w) != (src.height, src.width) else ""
             stats = {"CRS": src.crs.to_string(), "Pixel size": f"{src.res[0]:g} × {src.res[1]:g}",
                      "Rows × columns": f"{src.height} × {src.width}",
-                     "NoData": f"{100 * (total - valid) / total:.1f}%" if total else "n/a"}
+                     "NoData": f"{approx}{100 * (total - valid) / total:.1f}%" if total else "n/a"}
     except Exception as exc:  # unreadable or corrupt file
         return LayerView(error=f"{layer.name}: {exc}")
 
@@ -149,7 +171,7 @@ def render_layer(layer: Layer, max_px: int = 1024) -> LayerView:
         legend = pd.DataFrame([[None, f"{v:,.1f}", c, None, None] for v, c in zip(values, VIRIDIS)],
                               columns=LEGEND_COLUMNS)
         if valid:
-            stats["Range"] = f"{lo:,.1f} – {hi:,.1f}"
+            stats["Range"] = f"{approx}{lo:,.1f} – {hi:,.1f}"
     rgba[ok, 3] = 255
     buffer = io.BytesIO()
     Image.fromarray(rgba, "RGBA").save(buffer, format="PNG")

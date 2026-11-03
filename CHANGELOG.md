@@ -6,6 +6,38 @@ a [GitHub Release](https://github.com/wosonday/swat-preprocessing/releases).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-03
+
+### Added
+- **Overviews and statistics in the clipped rasters** (`project.overviews`, default `true`): after clipping, every
+  output raster gets internal overviews (factors 2, 4, 8… down to 256 px; `average` for the DEM, `mode` for land use
+  and soil so no class is invented) and GDAL's standard `STATISTICS_*` band tags plus the class pixel counts
+  (`SWATPREP_CLASS_COUNTS`). Outputs from earlier versions get them on the next Build without re-clipping
+  (QA `overviews_added`). Pixel values are unchanged; files grow by about a third. `swatprep clip` gains
+  `--overviews/--no-overviews` (default on).
+
+### Changed (speed)
+- Explore › Map reads the stored statistics instead of scanning the raster: a 10 000 × 10 000 DEM preview takes
+  0.47 s instead of 5.79 s, with exact values; a raster without them shows the range estimated from the preview,
+  marked `≈`, and exact class counts.
+- Outlines on the map (boundary, extra layers) are simplified for display (Douglas–Peucker, tolerance = extent / 5000,
+  in metres) and rounded to 6 decimals; area and extent still come from the full geometry. The map JSON is sent
+  without indentation. A 20 000-vertex boundary goes from 2 394 kB to 43 kB per rerun.
+- GDAL uses every CPU core (`GDAL_NUM_THREADS=ALL_CPUS`, unless set by the user) for clipping, reprojection,
+  compression and overviews: clipping is 1.6–1.8× faster on 2 cores.
+- Raster code counting (`unique_codes`, map legends) uses `np.bincount` on large strips without masked arrays:
+  about 3× faster, same result.
+
+### Fixed
+- `masked_stats` ignores NaN pixels in float rasters whose NoData value is not NaN.
+
+### Documentation
+- **Learning guide** `docs/LEARNING_GUIDE_VI.md` (Vietnamese): core libraries, how the CLI, API and web app reach
+  the same processors, how the form is generated from the Pydantic models, how the Explore map is built and
+  made interactive, and measured optimisations (overviews, preview size, geometry simplification, caching).
+  Seven runnable examples in `docs/learning/`.
+- `README.md` / `README_VI.md`: Explore and Map, field help, virtual stations, `uv run app`.
+
 ## [0.8.0] - 2026-11-02
 
 ### Added

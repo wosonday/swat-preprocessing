@@ -14,6 +14,7 @@ project:
   boundary: "./data/boundary.geojson"  # .shp | .gpkg | .geojson; có thì build tự cắt dem/landuse/soil
   output_dir: "./output"            # = ./output
   targets: ["swatplus"]             # "swatplus" | "swat" | cả hai; chọn weather và header lookup đất
+  overviews: true                   # = true; thêm overviews + thống kê vào raster đã cắt (bản đồ web app mở nhanh)
 
 # --- (tuỳ chọn) cắt rảnh tay từng raster theo danh sách; thường KHÔNG cần vì dem/landuse/soil
 #     đã tự cắt. Cần project.boundary. Chạy riêng: swatprep build config.yaml --only clip

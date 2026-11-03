@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -25,27 +27,145 @@ def iter_strips(ds, max_pixels: int = 16_000_000, window=None):
         yield Window(int(w.col_off), int(w.row_off) + row, width, min(rows, height - row))
 
 
+def gdal_env(**options):
+    """rasterio.Env with GDAL using every CPU core for compression, warping and overviews.
+
+    A GDAL_NUM_THREADS environment variable set by the user wins (e.g. 2 to leave cores free).
+    """
+    import rasterio
+
+    return rasterio.Env(GDAL_NUM_THREADS=os.environ.get("GDAL_NUM_THREADS") or "ALL_CPUS", **options)
+
+
+def _valid(ds, data: np.ndarray, band: int = 1) -> np.ndarray:
+    """1-D array of the valid values of `data`: NoData and NaN removed (cheaper than a masked array)."""
+    data = data.ravel()
+    keep = None
+    nodata = ds.nodatavals[band - 1]
+    if nodata is not None and not np.isnan(nodata):
+        keep = data != nodata
+    if data.dtype.kind == "f":
+        finite = ~np.isnan(data)
+        keep = finite if keep is None else keep & finite
+    return data if keep is None else data[keep]
+
+
 def masked_stats(ds, band: int = 1, max_pixels: int = 16_000_000, window=None):
-    """(min, max, mean, n_valid) of valid (non-NoData) pixels, streamed by strips."""
+    """(min, max, mean, n_valid) of valid (non-NoData, non-NaN) pixels, streamed by strips."""
     vmin, vmax, total, count = np.inf, -np.inf, 0.0, 0
     for win in iter_strips(ds, max_pixels, window):
-        data = ds.read(band, window=win, masked=True)
-        n = int(data.count())
-        if n:
+        data = _valid(ds, ds.read(band, window=win), band)
+        if data.size:
             vmin = min(vmin, float(data.min()))
             vmax = max(vmax, float(data.max()))
             total += float(data.sum(dtype="float64"))
-            count += n
+            count += int(data.size)
     return (vmin, vmax, total / count, count) if count else (None, None, None, 0)
+
+
+_BINCOUNT_SPAN = 1 << 20     # codes spread over at most ~1 million values: counted with np.bincount
+
+
+def class_counts(ds, band: int = 1, max_pixels: int = 16_000_000, window=None) -> dict:
+    """Exact {code: pixel count} of valid pixels, streamed by strips.
+
+    Integer codes are counted with np.bincount (no sort, no masked array), about 3x faster than
+    np.unique on a masked read; codes spread too widely, or float rasters, fall back to np.unique.
+    """
+    counts: dict = {}
+    for win in iter_strips(ds, max_pixels, window):
+        data = _valid(ds, ds.read(band, window=win), band)
+        if not data.size:
+            continue
+        lo, hi = (int(data.min()), int(data.max())) if data.dtype.kind in "iu" else (0, _BINCOUNT_SPAN)
+        if hi - lo < _BINCOUNT_SPAN:
+            # int64 before subtracting: int16 codes from -100 to 30 000 would overflow in int16
+            found = np.bincount(data if lo == 0 and data.dtype.kind == "u" else data.astype(np.int64) - lo)
+            codes = np.flatnonzero(found)
+            pairs = zip((codes + lo).tolist(), found[codes].tolist())
+        else:
+            values, found = np.unique(data, return_counts=True)
+            pairs = zip(values.tolist(), found.tolist())
+        for code, n in pairs:
+            counts[code] = counts.get(code, 0) + n
+    return counts
 
 
 def unique_codes(ds, band: int = 1, max_pixels: int = 16_000_000, window=None) -> set:
     """Unique valid (non-NoData) pixel values, streamed by strips."""
-    codes: set = set()
-    for win in iter_strips(ds, max_pixels, window):
-        data = ds.read(band, window=win, masked=True)
-        codes.update(np.unique(data.compressed()).tolist())
-    return codes
+    return set(class_counts(ds, band, max_pixels, window))
+
+
+CLASS_COUNTS_TAG = "SWATPREP_CLASS_COUNTS"   # band tag: JSON {code: pixel count} of a categorical raster
+
+
+def band_statistics(ds, categorical: bool, band: int = 1) -> dict[str, str]:
+    """GDAL's standard band statistics (as QGIS also reads them) and, for class rasters, the class counts."""
+    total = ds.width * ds.height
+    if categorical:
+        counts = class_counts(ds, band)
+        n = sum(counts.values())
+        mean = sum(code * k for code, k in counts.items()) / n if n else 0.0
+        var = sum(k * (code - mean) ** 2 for code, k in counts.items()) / n if n else 0.0
+        vmin, vmax = (min(counts), max(counts)) if counts else (0, 0)
+        tags = {CLASS_COUNTS_TAG: json.dumps({str(code): k for code, k in sorted(counts.items())})}
+    else:
+        vmin, vmax, n, s1, s2 = np.inf, -np.inf, 0, 0.0, 0.0
+        for win in iter_strips(ds):
+            data = _valid(ds, ds.read(band, window=win), band).astype("float64")
+            if data.size:
+                vmin, vmax = min(vmin, float(data.min())), max(vmax, float(data.max()))
+                n, s1, s2 = n + data.size, s1 + float(data.sum()), s2 + float((data * data).sum())
+        mean = s1 / n if n else 0.0
+        var = max(s2 / n - mean * mean, 0.0) if n else 0.0
+        vmin, vmax = (vmin, vmax) if n else (0, 0)
+        tags = {}
+    return {**tags, "STATISTICS_MINIMUM": repr(float(vmin)), "STATISTICS_MAXIMUM": repr(float(vmax)),
+            "STATISTICS_MEAN": repr(mean), "STATISTICS_STDDEV": repr(var ** 0.5),
+            "STATISTICS_VALID_PERCENT": repr(100 * n / total if total else 0.0)}
+
+
+def store_stats(path: Path, categorical: bool) -> None:
+    """Compute the statistics once (at Build) and keep them in the GeoTIFF, so viewers need not scan it."""
+    import rasterio
+
+    with gdal_env(), rasterio.open(path) as ds:
+        tags = band_statistics(ds, categorical)
+    with rasterio.open(path, "r+") as ds:
+        ds.update_tags(1, **tags)
+
+
+OVERVIEW_MIN_SIZE = 256      # stop when an overview level would be smaller than this (pixels)
+
+
+def overview_factors(width: int, height: int, min_size: int = OVERVIEW_MIN_SIZE) -> list[int]:
+    """Decimation factors 2, 4, 8, ... while the level is still at least `min_size` pixels wide."""
+    factors, factor = [], 2
+    while max(width, height) / factor >= min_size:
+        factors.append(factor)
+        factor *= 2
+    return factors
+
+
+def add_overviews(path: Path, categorical: bool) -> list[int]:
+    """Add internal overviews (image pyramids) to a GeoTIFF so map previews read a small level.
+
+    categorical  True for class codes (land use, soil): 'mode' keeps real classes;
+                 False for continuous data (DEM): 'average'.
+    Returns the factors present; a raster that already has overviews is left unchanged,
+    and one smaller than 512 pixels gets none.
+    """
+    import rasterio
+    from rasterio.enums import Resampling
+
+    with gdal_env(), rasterio.open(path) as ds:
+        existing = ds.overviews(1)
+        factors = overview_factors(ds.width, ds.height)
+    if existing or not factors:
+        return existing
+    with gdal_env(COMPRESS_OVERVIEW="DEFLATE"), rasterio.open(path, "r+") as ds:
+        ds.build_overviews(factors, Resampling.mode if categorical else Resampling.average)
+    return factors
 
 
 def _read_boundary(boundary_path: Path, crs):
@@ -198,7 +318,7 @@ def clip_raster(
     from rasterio.windows import Window
 
     src_path, dst_path = Path(src_path), Path(dst_path)
-    with rasterio.open(src_path) as src:
+    with gdal_env(), rasterio.open(src_path) as src:
         if src.crs is None:
             raise InputValidationError(f"Raster has no CRS, cannot clip: {src_path}")
         if mask and src.nodata is None:

@@ -4,13 +4,15 @@
 
 `swatprep` is a small Python library and CLI that prepares raw DEM, land-use, soil, weather and
 streamflow inputs for SWAT Classic and SWAT+ workflows. You describe a project once in a YAML file
-and run `swatprep build`, or fill the same YAML in the **web app** (`swatprep-ui`).
+and run `swatprep build`, or fill the same YAML in the **web app** (`swatprep-ui`), which also charts and maps
+the data behind it.
 
 It is deliberately a **preprocessor and format writer**. It does not replace QSWAT, QSWAT+,
 SWAT+ Editor, TauDEM, WhiteboxTools, SWAT+ Toolbox, PEST or any calibration workflow.
 
 Full guides: **[docs/USER_GUIDE_VI.md](docs/USER_GUIDE_VI.md)** (Vietnamese, step by step, every YAML
-option) · [examples/config_full.yaml](examples/config_full.yaml) (annotated template) ·
+option) · **[docs/LEARNING_GUIDE_VI.md](docs/LEARNING_GUIDE_VI.md)** (Vietnamese, how the code fits together, with
+runnable examples in [docs/learning/](docs/learning/)) · [examples/config_full.yaml](examples/config_full.yaml) (annotated template) ·
 [docs/WEATHER_OUTPUT.md](docs/WEATHER_OUTPUT.md) · [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) ·
 [TESTING_GUIDE.md](TESTING_GUIDE.md) · [docs/INSTALL.md](docs/INSTALL.md) (team install, Vietnamese) ·
 [docs/RELEASING.md](docs/RELEASING.md) · [CHANGELOG.md](CHANGELOG.md).
@@ -21,11 +23,11 @@ option) · [examples/config_full.yaml](examples/config_full.yaml) (annotated tem
 |---|---|
 | Configuration | Pydantic-validated YAML; paths relative to the YAML file; `validate` reports every missing file at once |
 | Rasters (DEM, land use, soil) | Crop to `project.boundary`, **reproject to `project.crs`**, optional output `resolution`; memory-bounded (strip reads, boundary window); DEM statistics; raster-code cross-check against the lookup / soil table; tables restricted to the basin; clipped rasters and tables written into one `output_dir` |
-| Weather | Station / daily CSV validation, WGN statistics, **SWAT+** or **SWAT Classic** output (`project.targets`), split precip / temperature sources, `file_pattern`; **gap filling** from a CSV or daily NetCDF source with per-station bias correction |
+| Weather | Station / daily CSV validation, WGN statistics, **SWAT+** or **SWAT Classic** output (`project.targets`), split precip / temperature sources, `file_pattern`; **gap filling** from a CSV or daily NetCDF source with per-station bias correction, including **virtual stations** (no observed day) that borrow the nearest gauge's correction |
 | Streamflow | Long-format CSV validation and per-station output |
 | Quality assurance | Every step returns `pass` / `warn` / `fail` checks; `manifest.json` and `qa_report.md` are written for each build |
 | Converters | Vendor `.day` files, wide streamflow tables, raw station files to CSV / SWAT2012 / SWAT+ |
-| Web app | Streamlit form over the same YAML: open or create a project folder and its configs, switch sections on or off, paste or browse for files, Validate (errors shown on the field) and Build, QA table and `manifest.json` download; comments in the YAML are kept |
+| Web app | **Configure**: a form over the same YAML (comments kept): projects screen, sections on or off, paste or browse for files, a searchable CRS list, an ⓘ description on every field and a **Show help** switch, Validate (errors shown on the field) and Build with the QA table. **Explore**: weather completeness heatmap, observed vs filled series and monthly precipitation climatology; streamflow hydrograph, flow duration curve and monthly climatology (WMO-No. 1203 completeness rules); an interactive **Map** of the output rasters with the boundary, rain stations, extra layers (`.shp`, `.gpkg`, `.geojson`, CSV points) and an extents table |
 | Distribution | One-click install without Docker (`install.bat` / `install.sh`), Docker image `ghcr.io/wosonday/swatprep`, a GitHub Release per version |
 
 Out of scope: watershed delineation, HRU/LSU generation, a complete SWAT+ `project.sqlite`,
@@ -38,7 +40,7 @@ calibration or uncertainty analysis, automatic data download, a GUI that replace
 |---|---|
 | Users on Windows (no Python or Docker needed) | Download and double-click [`install.bat`](https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.bat). It installs the latest release and adds a **SWATprep** shortcut to the Desktop; run it again to update, or `install.bat v0.3.0` for a given version. Guide: [docs/INSTALL.md](docs/INSTALL.md) |
 | Users on Linux / macOS | `curl -LO https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.sh && sh install.sh` |
-| Developers | `uv sync --extra geo --extra app --extra dev`, then `uv run swatprep --version` and `uv run swatprep-ui` |
+| Developers | `uv sync --extra geo --extra app --extra dev`, then `uv run swatprep --version` and `uv run swatprep-ui` (or the short alias `uv run app`) |
 | Docker | `docker run --rm -p 127.0.0.1:8501:8501 -v "<data>:/data:ro" -v "<projects>:/workspace" ghcr.io/wosonday/swatprep:latest` (or a version tag such as `:0.3.0`) |
 
 Extras: `geo` (rasterio, geopandas, shapely: rasters, clipping, reprojection), `app` (Streamlit web app),
@@ -58,6 +60,8 @@ works too; uv is preferred because it installs exactly the versions in `uv.lock`
    paths can be pasted or picked with **Browse**.
 4. **Validate**: missing files and invalid values are marked on the fields. **Build**: review the QA
    table and download `manifest.json`.
+5. Switch to **Explore** to chart the weather and streamflow data and to see the rasters, stations and your own
+   layers on the **Map**. Turn on **Show help** in the sidebar to read what each field does.
 
 The form reads and writes the same `config.yaml` (comments and key order are kept), so a config made in
 the app also runs with the CLI. Paths are saved as the app sees them; in Docker that means `/data/...`.
@@ -132,7 +136,7 @@ streamflow:
 
 | Section | Required fields | Optional fields (default) |
 |---|---|---|
-| `project` | `name`, `crs` | `boundary` (none), `output_dir` (`./output`), `targets` (`[swatplus]`) |
+| `project` | `name`, `crs` | `boundary` (none), `output_dir` (`./output`), `targets` (`[swatplus]`), `overviews` (`true`) |
 | `dem` | `path` | `output_name` (`dem_projected.tif`), `clip` (`true`), `resampling` (`bilinear`), `resolution` |
 | `landuse` | `raster`, `lookup` | `source_code_col` (`code`), `swat_code_col` (`swat_code`), `swat_name_col` (`swat_name`), `output_name` (`landuse_clip.tif`), `clip` (`true`), `output_lookup` (`true`), `resolution` |
 | `soil` | `raster`, `table` | `soil_key_col` (`soil_id`), `output_usersoil` (`true`), `usersoil_format` (`swat`), `output_name` (`soil_clip.tif`), `clip` (`true`), `output_lookup` (`true`), `resolution` |
@@ -159,6 +163,10 @@ into the same `output_dir`:
 - A clipped file is rewritten when its source or the boundary is newer, or when its CRS / resolution no
   longer matches the config; otherwise it is kept (`clip_skipped`).
 - `clip: false` in a section turns this off for it (whole raster scanned, full tables, no clipped file).
+- With `project.overviews: true` (default) every clipped raster also gets internal **overviews** (`average` for the
+  DEM, `mode` for class rasters) and GDAL **statistics** tags (plus class pixel counts), so the web app's map opens
+  large rasters about ten times faster with exact values; pixel values are unchanged, files grow by about a third.
+  GDAL uses every CPU core for clipping and overviews (set `GDAL_NUM_THREADS` to limit it).
 - The same operation is available stand-alone:
 
 ```bash
@@ -207,14 +215,29 @@ changed. Results go to `output_dir` together with `fill_report.csv`; point `weat
 takes the lower-index cell); if it has no data, the nearest cell with data within `search_radius` is
 used and a warning is reported.
 
+**Virtual stations.** A station with no observed day (or no data file) has no overlap, so by default it is not
+filled and is written as `-99`. Set `fill_ungauged: true` to fill it entirely from the source: with
+`correct_ungauged: true` (default) it takes the correction of the nearest gauged station of the same variable
+within `max_borrow_km` (default 50 km, great-circle distance), otherwise raw source values. `fill_report.csv`
+records `correction_from` and `distance_km`.
+
+```yaml
+  fill:
+    type: netcdf
+    output_dir: ./data/filled
+    fill_ungauged: true
+    correct_ungauged: true
+    max_borrow_km: 50
+```
+
 ## Command line
 
 | Command | Purpose |
 |---|---|
 | `swatprep validate CONFIG` | Check the YAML and the existence of every input file; writes nothing |
 | `swatprep build CONFIG [--only DOMAIN]` | Run all configured domains or one |
-| `swatprep fill weather --config CONFIG` | Fill missing station days (flags override the YAML) |
-| `swatprep clip RASTER BOUNDARY OUT [--mask] [--crs] [--resampling] [--resolution]` | Crop (and optionally reproject) one raster |
+| `swatprep fill weather --config CONFIG` | Fill missing station days (flags override the YAML, e.g. `--fill-ungauged`, `--no-correct-ungauged`, `--max-borrow-km 30`) |
+| `swatprep clip RASTER BOUNDARY OUT [--mask] [--crs] [--resampling] [--resolution] [--no-overviews]` | Crop (and optionally reproject) one raster; adds overviews and statistics unless `--no-overviews` |
 | `swatprep inspect raster\|weather PATH` | Quick look at a raster or weather CSV |
 | `swatprep convert climate\|streamflow\|weather ...` | Convert vendor formats |
 
@@ -279,13 +302,17 @@ with hard failures are not written.
 ```bash
 uv sync --extra geo --extra app --extra dev
 uv run python -m pytest -q        # core and web app tests (tests/ui uses Streamlit AppTest)
-uv run swatprep-ui                # run the web app from source
+uv run swatprep-ui                # run the web app from source (alias: uv run app)
 uv build                          # sdist and wheel
 ```
 
+New to the code? Start with [docs/LEARNING_GUIDE_VI.md](docs/LEARNING_GUIDE_VI.md): core libraries, how the CLI,
+API and web app reach the same processors, how the form is generated from the Pydantic models, how the map is built
+and what makes it fast, with measured numbers and runnable scripts in [docs/learning/](docs/learning/).
+
 The web app lives in `app/` and depends one way on the core: `pages` -> `ui` -> `services` -> `swatprep`.
-`app/services` never imports Streamlit and holds the tested logic. Every config field must be listed in
-`app/services/form_layout.py`; a test fails when `swatprep/config.py` gains a field the form does not show.
+`app/services` never imports Streamlit and holds the tested logic. Every config field must have a
+`description` (shown as the field's help) and be listed in `app/services/form_layout.py`; tests fail otherwise.
 CI tests every pull request; a tag `vX.Y.Z` publishes the Docker image and a GitHub Release
 ([docs/RELEASING.md](docs/RELEASING.md)).
 
@@ -300,3 +327,6 @@ validated data. Do not turn this project into a full SWAT+ model builder.
 - Bieger, K. et al. (2017). Introduction to SWAT+. *J. Am. Water Resour. Assoc.*, 53(1), 115-130.
 - Teutschbein, C. and Seibert, J. (2012). Bias correction of regional climate model simulations for
   hydrological climate-change impact studies. *J. Hydrol.*, 456-457, 12-29.
+- Vogel, R.M. and Fennessey, N.M. (1994). Flow-duration curves. I: New interpretation and confidence intervals.
+  *J. Water Resour. Plann. Manage.*, 120(4), 485-504.
+- World Meteorological Organization (2017). *WMO Guidelines on the Calculation of Climate Normals* (WMO-No. 1203).

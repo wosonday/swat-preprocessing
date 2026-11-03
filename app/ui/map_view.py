@@ -206,3 +206,5 @@ def _legend(layer, view: LayerView) -> None:
     with stats_col:
         st.markdown("**Layer**")
         st.dataframe([{"Property": k, "Value": v} for k, v in view.stats.items()], hide_index=True)
+        if any(str(v).startswith("≈") for v in view.stats.values()):
+            st.caption("≈ estimated from the map preview (a reduced copy of the raster).")

@@ -13,6 +13,10 @@ COLORS = ["#ff7528", "#8e44ad", "#e91e63", "#f1c40f", "#16a085", "#795548", "#00
 STATIONS_COLOR = "#00aa54"
 CSV_SUFFIXES = (".csv", ".txt")
 VECTOR_SUFFIXES = (".shp", ".gpkg", ".geojson", ".json")
+# Outlines sent to the map are simplified (Douglas-Peucker) with a tolerance of extent / 5000: about 0.2 px
+# on a 1000 px wide map, invisible until zoomed in 5x. Area and extent always come from the full geometry.
+SIMPLIFY_FRACTION = 1 / 5000
+DECIMALS = 6                     # 1e-6 degree ≈ 0.1 m: more digits only make the map payload bigger
 
 
 @dataclass
@@ -85,6 +89,33 @@ def _read_vector(path: Path):
     return frame[["label", "geometry"]]
 
 
+def _metric_crs(frame, project_crs: str | None):
+    """The project CRS when it is projected (metres), otherwise the UTM zone of the layer."""
+    from pyproj import CRS
+
+    if project_crs:
+        crs = CRS.from_user_input(project_crs)
+        if crs.is_projected:
+            return crs
+    return frame.to_crs("EPSG:4326").estimate_utm_crs()
+
+
+def _display(others, project_crs: str | None):
+    """Lines and polygons for the map: simplified in metres, then rounded to DECIMALS in degrees."""
+    import shapely
+
+    try:
+        metric = others.to_crs(_metric_crs(others, project_crs))
+        west, south, east, north = metric.total_bounds
+        tolerance = max(east - west, north - south) * SIMPLIFY_FRACTION
+        if tolerance > 0:
+            metric = metric.set_geometry(metric.simplify(tolerance, preserve_topology=True))
+        shown = metric.to_crs("EPSG:4326")
+    except Exception:  # no CRS database, odd geometry: send it as it is
+        shown = others.to_crs("EPSG:4326")
+    return shown.set_geometry(shapely.set_precision(shown.geometry.values, 10 ** -DECIMALS))
+
+
 def _view(name: str, frame, project_crs: str | None) -> OverlayView:
     frame = frame[frame.geometry.notna() & ~frame.geometry.is_empty]
     shown = frame.to_crs("EPSG:4326")
@@ -93,15 +124,16 @@ def _view(name: str, frame, project_crs: str | None) -> OverlayView:
         if len(types) == 1 else "mixed"
     is_point = shown.geom_type.isin(["Point", "MultiPoint"])
     singles = shown[is_point].explode(index_parts=False)          # a MultiPoint becomes one row per point
-    points = [{"position": [g.x, g.y], "label": label} for g, label in zip(singles.geometry, singles["label"])]
-    others = shown[~is_point]
+    points = [{"position": [round(g.x, DECIMALS), round(g.y, DECIMALS)], "label": label}
+              for g, label in zip(singles.geometry, singles["label"])]
+    others = frame[~is_point.to_numpy()]
     area = None
     polygons = frame[frame.geom_type.isin(["Polygon", "MultiPolygon"])]
     if len(polygons) and project_crs:
         area = float(polygons.to_crs(project_crs).area.sum() / 1e6)
     return OverlayView(
         name=name, kind=kind, count=len(shown), points=points,
-        geojson=json.loads(others.to_json()) if len(others) else None,
+        geojson=json.loads(_display(others, project_crs).to_json(drop_id=True)) if len(others) else None,
         bounds=tuple(float(v) for v in shown.total_bounds) if len(shown) else None, area_km2=area,
     )
 

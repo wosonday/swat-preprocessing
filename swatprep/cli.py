@@ -379,17 +379,27 @@ def convert_weather(
               "(nearest for class codes, bilinear/cubic for a DEM).")
 @click.option("--resolution", type=click.FloatRange(min=0, min_open=True), default=None,
               help="Output pixel size in the output CRS units (default: GDAL's choice).")
-def clip(raster: Path, boundary: Path, out_path: Path, mask: bool, dst_crs, resampling, resolution) -> None:
+@click.option("--overviews/--no-overviews", default=True, show_default=True,
+              help="Add overviews (image pyramids) and statistics so map viewers open the output quickly.")
+def clip(raster: Path, boundary: Path, out_path: Path, mask: bool, dst_crs, resampling, resolution,
+         overviews: bool) -> None:
     """Crop RASTER to the extent of BOUNDARY and write the GeoTIFF OUT_PATH.
 
     Reads only the needed window strip by strip, so huge rasters are fine.
     With --crs the raster is also reprojected (only the cropped window is computed).
     """
     try:
-        from .utils.raster import clip_raster
+        from .utils.raster import add_overviews, clip_raster, store_stats
 
         clip_raster(raster, out_path, boundary, mask=mask, dst_crs=dst_crs,
                     resampling=resampling, resolution=resolution)
+        if overviews:
+            import rasterio
+
+            with rasterio.open(out_path) as ds:
+                categorical = ds.dtypes[0].startswith(("int", "uint")) and resampling == "nearest"
+            store_stats(out_path, categorical)
+            add_overviews(out_path, categorical)
     except ImportError:
         click.echo("Install swatprep[geo] to clip rasters.", err=True)
         sys.exit(1)

@@ -4,13 +4,15 @@
 
 `swatprep` là thư viện Python kèm CLI để chuẩn bị dữ liệu DEM, sử dụng đất, thổ nhưỡng, khí tượng và
 dòng chảy quan trắc cho SWAT Classic và SWAT+. Anh/chị mô tả dự án một lần trong file YAML rồi chạy
-`swatprep build`, hoặc điền chính file YAML đó trên **giao diện web** (`swatprep-ui`).
+`swatprep build`, hoặc điền chính file YAML đó trên **giao diện web** (`swatprep-ui`); giao diện web còn vẽ biểu đồ
+và bản đồ cho dữ liệu của cấu hình.
 
 Công cụ giới hạn có chủ ý ở vai trò **tiền xử lý và ghi định dạng đầu vào**; không thay thế QSWAT,
 QSWAT+, SWAT+ Editor, TauDEM, WhiteboxTools, SWAT+ Toolbox, PEST hay quy trình hiệu chỉnh.
 
 Tài liệu chi tiết: **[docs/USER_GUIDE_VI.md](docs/USER_GUIDE_VI.md)** (hướng dẫn từng bước, mọi tham số YAML)
-· [examples/config_full.yaml](examples/config_full.yaml) (file mẫu có chú thích) ·
+· **[docs/LEARNING_GUIDE_VI.md](docs/LEARNING_GUIDE_VI.md)** (tài liệu học: mã kết nối với nhau ra sao, kèm mã mẫu
+chạy được trong [docs/learning/](docs/learning/)) · [examples/config_full.yaml](examples/config_full.yaml) (file mẫu có chú thích) ·
 [docs/WEATHER_OUTPUT.md](docs/WEATHER_OUTPUT.md) · [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md) ·
 [TESTING_GUIDE.md](TESTING_GUIDE.md) · [docs/INSTALL.md](docs/INSTALL.md) (cài đặt cho nhóm) ·
 [docs/RELEASING.md](docs/RELEASING.md) · [CHANGELOG.md](CHANGELOG.md).
@@ -21,11 +23,11 @@ Tài liệu chi tiết: **[docs/USER_GUIDE_VI.md](docs/USER_GUIDE_VI.md)** (hư�
 |---|---|
 | Cấu hình | YAML kiểm tra bằng Pydantic; đường dẫn tương đối tính từ file YAML; `validate` báo mọi file thiếu trong một lần |
 | Raster (DEM, sử dụng đất, thổ nhưỡng) | Cắt theo `project.boundary`, **chiếu về `project.crs`**, tuỳ chọn `resolution`; tiết kiệm bộ nhớ (đọc theo dải, chỉ đọc cửa sổ lưu vực); thống kê DEM; đối chiếu mã raster với bảng tra / bảng đất; bảng chỉ giữ các mã có trong lưu vực; raster đã cắt và bảng ghi cùng một `output_dir` |
-| Khí tượng | Kiểm tra CSV trạm và số liệu ngày, tính thống kê WGN, xuất **SWAT+** hoặc **SWAT Classic** (`project.targets`), nguồn mưa / nhiệt độ tách riêng, `file_pattern`; **điền ngày thiếu** từ nguồn CSV hoặc NetCDF theo ngày, có hiệu chỉnh sai lệch từng trạm |
+| Khí tượng | Kiểm tra CSV trạm và số liệu ngày, tính thống kê WGN, xuất **SWAT+** hoặc **SWAT Classic** (`project.targets`), nguồn mưa / nhiệt độ tách riêng, `file_pattern`; **điền ngày thiếu** từ nguồn CSV hoặc NetCDF theo ngày, có hiệu chỉnh sai lệch từng trạm, kể cả **trạm ảo** (không có ngày đo nào) mượn hệ số của trạm đo gần nhất |
 | Dòng chảy | Kiểm tra CSV dạng dài và ghi theo trạm |
 | Kiểm soát chất lượng | Mọi bước trả về kiểm tra `pass` / `warn` / `fail`; mỗi lần build ghi `manifest.json` và `qa_report.md` |
 | Chuyển đổi | File `.day`, bảng dòng chảy dạng rộng, file trạm thô -> CSV / SWAT2012 / SWAT+ |
-| Giao diện web | Form Streamlit trên chính file YAML: chọn thư mục dự án, bật/tắt từng mục, dán đường dẫn hoặc Browse, Validate (lỗi hiện ngay tại ô) và Build, bảng QA và tải `manifest.json`; giữ nguyên comment trong YAML |
+| Giao diện web | **Configure**: form trên chính file YAML (giữ comment): màn hình dự án, bật/tắt từng mục, dán đường dẫn hoặc Browse, danh sách CRS tìm kiếm được, mô tả ⓘ cho mọi ô và công tắc **Show help**, Validate (lỗi hiện ngay tại ô) và Build kèm bảng QA. **Explore**: bản đồ nhiệt mức đủ số liệu, chuỗi đo và chuỗi đã điền, khí hậu mưa tháng; đường quá trình lưu lượng, đường duy trì lưu lượng và khí hậu tháng (quy tắc đủ số liệu WMO-No. 1203); **Map** tương tác với raster đầu ra, ranh giới, trạm mưa, lớp thêm (`.shp`, `.gpkg`, `.geojson`, CSV điểm) và bảng phạm vi |
 | Phân phối | Cài bằng một cú nhấp, không cần Docker (`install.bat` / `install.sh`); Docker image `ghcr.io/wosonday/swatprep`; mỗi phiên bản có một GitHub Release |
 
 Ngoài phạm vi: phân định lưu vực, sinh HRU/LSU, `project.sqlite` SWAT+ hoàn chỉnh, hiệu chỉnh và phân
@@ -38,7 +40,7 @@ chỉ soạn và chạy file YAML của công cụ này).
 |---|---|
 | Người dùng Windows (không cần Python hay Docker) | Tải và nhấp đúp [`install.bat`](https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.bat): cài phiên bản mới nhất và tạo biểu tượng **SWATprep** trên Desktop; chạy lại để cập nhật, hoặc `install.bat v0.3.0` để cài một phiên bản cụ thể. Hướng dẫn: [docs/INSTALL.md](docs/INSTALL.md) |
 | Người dùng Linux / macOS | `curl -LO https://github.com/wosonday/swat-preprocessing/releases/latest/download/install.sh && sh install.sh` |
-| Người phát triển | `uv sync --extra geo --extra app --extra dev`, rồi `uv run swatprep --version` và `uv run swatprep-ui` |
+| Người phát triển | `uv sync --extra geo --extra app --extra dev`, rồi `uv run swatprep --version` và `uv run swatprep-ui` (hoặc lệnh ngắn `uv run app`) |
 | Docker | `docker run --rm -p 127.0.0.1:8501:8501 -v "<dữ liệu>:/data:ro" -v "<dự án>:/workspace" ghcr.io/wosonday/swatprep:latest` (hoặc tag phiên bản như `:0.3.0`) |
 
 Nhóm tuỳ chọn: `geo` (rasterio, geopandas, shapely: raster, cắt, chiếu lại), `app` (giao diện web
@@ -58,6 +60,8 @@ Streamlit), `dev` (pytest). Không có `geo` vẫn chạy được kiểm tra c�
    dán hoặc chọn bằng **Browse**.
 4. **Validate**: tệp thiếu và giá trị sai được đánh dấu ngay tại ô. **Build**: xem bảng QA và tải
    `manifest.json`.
+5. Chuyển sang **Explore** để xem biểu đồ khí tượng, dòng chảy và xem raster, trạm, lớp của anh/chị trên **Map**.
+   Bật **Show help** ở thanh bên để đọc mô tả của từng ô.
 
 Form đọc và ghi chính file `config.yaml` (giữ comment và thứ tự khoá), nên config tạo trên app vẫn chạy
 được bằng CLI. Đường dẫn được lưu theo cách app nhìn thấy; trong Docker là `/data/...`.
@@ -132,12 +136,12 @@ streamflow:
 
 | Mục | Bắt buộc | Tuỳ chọn (mặc định) |
 |---|---|---|
-| `project` | `name`, `crs` | `boundary` (không), `output_dir` (`./output`), `targets` (`[swatplus]`) |
+| `project` | `name`, `crs` | `boundary` (không), `output_dir` (`./output`), `targets` (`[swatplus]`), `overviews` (`true`) |
 | `dem` | `path` | `output_name` (`dem_projected.tif`), `clip` (`true`), `resampling` (`bilinear`), `resolution` |
 | `landuse` | `raster`, `lookup` | `source_code_col` (`code`), `swat_code_col` (`swat_code`), `swat_name_col` (`swat_name`), `output_name` (`landuse_clip.tif`), `clip` (`true`), `output_lookup` (`true`), `resolution` |
 | `soil` | `raster`, `table` | `soil_key_col` (`soil_id`), `output_usersoil` (`true`), `usersoil_format` (`swat`), `output_name` (`soil_clip.tif`), `clip` (`true`), `output_lookup` (`true`), `resolution` |
 | `weather` | `start`, `end` và một nguồn (`stations` + `data_dir`, hoặc `precip` / `temp`) | `file_pattern` (`{id}.csv`), `variables` (`[precip, tmax, tmin]`), `units`, `missing_policy` (`fail`), `fill` |
-| `streamflow` | `path` | `format` (`long`; `per_station` for one-station files, id = file name), `glob` (`Q_*.csv`), `date_col` (`date`), `station_id_col` (`station_id`), `value_col` (`flow`), `units` (`m3s`) |
+| `streamflow` | `path` | `format` (`long`; `per_station`: mỗi file một trạm, mã trạm = tên file), `glob` (`Q_*.csv`), `date_col` (`date`), `station_id_col` (`station_id`), `value_col` (`flow`), `units` (`m3s`) |
 | `clip` (danh sách) | mỗi mục: `src`, `dst` | `mask` (`false`), `resampling` (`nearest`), `resolution`; cần `project.boundary` |
 
 ## Cắt raster và chiếu về CRS dự án
@@ -158,6 +162,10 @@ Khi `project.boundary` được đặt, `build` cắt `dem`, `landuse`, `soil` t
 - File đã cắt được làm lại khi nguồn hoặc ranh giới mới hơn, hoặc khi CRS / độ phân giải không còn khớp
   cấu hình; ngược lại được giữ nguyên (`clip_skipped`).
 - Đặt `clip: false` trong từng mục để tắt (quét cả raster, bảng đầy đủ, không ghi raster đã cắt).
+- Khi `project.overviews: true` (mặc định), mỗi raster đã cắt có thêm **overviews** trong tệp (`average` cho DEM,
+  `mode` cho raster phân loại) và thẻ **thống kê** của GDAL (kèm số pixel từng lớp), nên bản đồ của web app mở raster
+  lớn nhanh hơn khoảng 10 lần mà số liệu vẫn chính xác; giá trị pixel không đổi, tệp lớn thêm khoảng 1/3. GDAL dùng
+  mọi nhân CPU khi cắt và tạo overviews (đặt `GDAL_NUM_THREADS` để giới hạn).
 - Có thể dùng độc lập:
 
 ```bash
@@ -205,14 +213,28 @@ lệch trung bình. Ngày đã có số liệu đo không bao giờ bị thay đ
 Ô lưới gần trạm nhất được dùng (trạm nằm đúng giữa hai ô lấy ô chỉ số thấp hơn); ô đó không có dữ liệu
 thì lấy ô có dữ liệu gần nhất trong `search_radius` và có cảnh báo.
 
+**Trạm ảo.** Trạm không có ngày đo nào (hoặc không có file số liệu) không có ngày trùng, nên mặc định không được
+điền và ra `-99`. Đặt `fill_ungauged: true` để điền toàn bộ từ nguồn: khi `correct_ungauged: true` (mặc định), trạm
+mượn hệ số hiệu chỉnh của trạm có đo gần nhất cùng biến trong `max_borrow_km` (mặc định 50 km, khoảng cách đường tròn
+lớn); không có trạm nào đủ gần thì dùng giá trị thô. `fill_report.csv` ghi thêm `correction_from` và `distance_km`.
+
+```yaml
+  fill:
+    type: netcdf
+    output_dir: ./data/filled
+    fill_ungauged: true
+    correct_ungauged: true
+    max_borrow_km: 50
+```
+
 ## Dòng lệnh
 
 | Lệnh | Chức năng |
 |---|---|
 | `swatprep validate CONFIG` | Kiểm tra YAML và sự tồn tại của file đầu vào; không ghi gì |
 | `swatprep build CONFIG [--only MỤC]` | Chạy mọi mục đã khai báo hoặc một mục |
-| `swatprep fill weather --config CONFIG` | Điền ngày thiếu (cờ dòng lệnh ghi đè YAML) |
-| `swatprep clip RASTER BOUNDARY OUT [--mask] [--crs] [--resampling] [--resolution]` | Cắt (và tuỳ chọn chiếu) một raster |
+| `swatprep fill weather --config CONFIG` | Điền ngày thiếu (cờ dòng lệnh ghi đè YAML, vd `--fill-ungauged`, `--no-correct-ungauged`, `--max-borrow-km 30`) |
+| `swatprep clip RASTER BOUNDARY OUT [--mask] [--crs] [--resampling] [--resolution] [--no-overviews]` | Cắt (và tuỳ chọn chiếu) một raster; mặc định thêm overviews và thống kê |
 | `swatprep inspect raster\|weather PATH` | Xem nhanh raster hoặc CSV khí tượng |
 | `swatprep convert climate\|streamflow\|weather ...` | Chuyển đổi định dạng gốc |
 
@@ -273,14 +295,17 @@ không hợp lệ được báo thành lỗi QA và mục có lỗi nặng khôn
 ```bash
 uv sync --extra geo --extra app --extra dev
 uv run python -m pytest -q        # test lõi và giao diện web (tests/ui dùng Streamlit AppTest)
-uv run swatprep-ui                # chạy giao diện web từ mã nguồn
+uv run swatprep-ui                # chạy giao diện web từ mã nguồn (lệnh ngắn: uv run app)
 uv build                          # sdist và wheel
 ```
 
+Mới làm quen với mã nguồn? Bắt đầu từ [docs/LEARNING_GUIDE_VI.md](docs/LEARNING_GUIDE_VI.md): thư viện lõi, cách CLI,
+API và web app cùng gọi các processor, cách form được sinh từ model Pydantic, cách dựng bản đồ và làm nó nhanh, kèm
+số đo và script chạy được trong [docs/learning/](docs/learning/).
+
 Giao diện web nằm trong `app/` và phụ thuộc một chiều vào lõi: `pages` -> `ui` -> `services` -> `swatprep`.
-`app/services` không import Streamlit và chứa phần logic có test. Mọi trường cấu hình phải có trong
-`app/services/form_layout.py`; test sẽ báo lỗi khi `swatprep/config.py` có trường mới mà form chưa hiển
-thị. CI chạy test cho mọi pull request; tag `vX.Y.Z` phát hành Docker image và GitHub Release
+`app/services` không import Streamlit và chứa phần logic có test. Mọi trường cấu hình phải có `description`
+(hiện thành mô tả của ô) và có trong `app/services/form_layout.py`; thiếu một trong hai thì test báo lỗi. CI chạy test cho mọi pull request; tag `vX.Y.Z` phát hành Docker image và GitHub Release
 ([docs/RELEASING.md](docs/RELEASING.md)).
 
 Giữ mỗi processor nhỏ và dễ test: nạp một domain, kiểm tra cấu trúc và giả định thủy văn, trả về result
@@ -294,3 +319,6 @@ cụ dựng mô hình SWAT+ hoàn chỉnh.
 - Bieger, K. và cs. (2017). Introduction to SWAT+. *J. Am. Water Resour. Assoc.*, 53(1), 115-130.
 - Teutschbein, C., Seibert, J. (2012). Bias correction of regional climate model simulations for
   hydrological climate-change impact studies. *J. Hydrol.*, 456-457, 12-29.
+- Vogel, R.M., Fennessey, N.M. (1994). Flow-duration curves. I: New interpretation and confidence intervals.
+  *J. Water Resour. Plann. Manage.*, 120(4), 485-504.
+- World Meteorological Organization (2017). *WMO Guidelines on the Calculation of Climate Normals* (WMO-No. 1203).

@@ -196,7 +196,7 @@ uv run python -m compileall swatprep app tests
 uv build
 ```
 
-Current baseline (v0.8.0): `uv run python -m pytest -q` passes with **489 tests**.
+Current baseline (v0.9.0): `uv run python -m pytest -q` passes with **521 tests**.
 Use `python -m pytest`, not bare `pytest`, so a missing dev install fails loudly.
 
 When a field is added to `swatprep/config.py`, declare it as `Field(..., description="...")` (English, 1-3
