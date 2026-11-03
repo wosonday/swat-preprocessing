@@ -151,6 +151,7 @@ File mẫu có chú thích đầy đủ: [`examples/config_full.yaml`](../exampl
 | `boundary` | đường dẫn | không | Ranh giới lưu vực (`.shp`, `.gpkg`, `.geojson`). Có thì `dem/landuse/soil` tự được cắt |
 | `output_dir` | đường dẫn | `./output` | Thư mục ghi toàn bộ kết quả |
 | `targets` | danh sách | `["swatplus"]` | `swatplus`, `swat` hoặc cả hai: quyết định định dạng weather và header lookup đất |
+| `overviews` | true/false | `true` | Thêm overviews (tháp ảnh) và thống kê vào các raster đã cắt để bản đồ của web app mở nhanh; giá trị pixel không đổi, tệp lớn thêm khoảng 1/3 (land use, soil ít hơn). Xem mục 5.1 |
 
 Lưu ý: file `boundary` **phải có CRS** (shapefile cần `.prj`; GeoJSON cần khai báo CRS). Công cụ tự
 chiếu ranh giới về CRS của từng raster nên ranh giới và raster được phép khác CRS nhau.
@@ -389,6 +390,14 @@ tạo ra mã lớp giả (mã phân loại là số định danh, không thể n
 
 **Tắt cắt:** `clip: false` ở từng mục (quét cả raster, không ghi raster mới, bảng giữ nguyên đầy đủ).
 
+**Overviews và thống kê (từ v0.9.0):** khi `project.overviews: true` (mặc định), mỗi raster đã cắt được thêm:
+(1) **overviews** trong tệp (hệ số 2, 4, 8… tới khi nhỏ hơn 256 px; `average` cho DEM, `mode` cho land use và soil
+để không sinh mã lớp không có thật) và (2) **thống kê** chuẩn của GDAL (`STATISTICS_MINIMUM`, `…_MAXIMUM`,
+`…_MEAN`, `…_STDDEV`, `…_VALID_PERCENT`; QGIS cũng đọc) cùng số pixel từng lớp. Bản đồ Explore nhờ đó mở raster lớn
+nhanh hơn khoảng 10 lần mà số liệu vẫn chính xác. Raster dưới 512 px không cần overviews. File đã cắt từ phiên bản
+cũ được bổ sung ở lần Build sau mà không cắt lại (QA `overviews_added`). Đặt `overviews: false` nếu cần tệp đúng như
+cũ. GDAL dùng mọi nhân CPU khi cắt và tạo overviews; đặt biến môi trường `GDAL_NUM_THREADS=2` để chừa nhân cho việc khác.
+
 **Ví dụ cho cùng một lưu vực:**
 
 ```yaml
@@ -586,7 +595,8 @@ Mỗi bước tạo ra các kiểm tra với mức **pass**, **warn** hoặc **f
 Một số kiểm tra thường gặp: `file_exists:*` (khi `validate`), `dem_crs_reprojected` (DEM đã được chiếu về CRS dự án),
 `dem_nodata_missing`, `landuse_cross_check`, `soil_cross_check`, `*_boundary_window` (đã đọc đúng cửa sổ lưu vực),
 `*_boundary_ignored` (không dùng được ranh giới, quét cả raster), `missing:<trạm>:<biến>` (thiếu số liệu),
-`streamflow_negative`, `clip_written`, `clip_skipped`, `clip_failed`. Toàn bộ nằm trong `qa_report.md`.
+`streamflow_negative`, `clip_written`, `clip_skipped`, `clip_failed`, `overviews_added`, `overviews_failed` (chỉ cảnh báo:
+bản đồ mở chậm hơn, kết quả không ảnh hưởng). Toàn bộ nằm trong `qa_report.md`.
 
 ---
 
@@ -744,7 +754,7 @@ sai CRS), raster phải lấp kín ranh giới, và các lớp có % diện tíc
 | `swatprep validate CONFIG` | Kiểm tra YAML và file đầu vào tồn tại, không ghi gì |
 | `swatprep build CONFIG [--only MỤC]` | Chạy tất cả hoặc một mục: `clip, dem, landuse, soil, weather, streamflow` |
 | `swatprep fill weather --config CONFIG` | Điền ngày thiếu (xem 5.4); có thể dùng cờ thay cho YAML |
-| `swatprep clip RASTER BOUNDARY OUT [--mask] [--crs EPSG] [--resampling M] [--resolution R]` | Cắt (và tuỳ chọn chiếu) một raster, không cần YAML |
+| `swatprep clip RASTER BOUNDARY OUT [--mask] [--crs EPSG] [--resampling M] [--resolution R] [--no-overviews]` | Cắt (và tuỳ chọn chiếu) một raster, không cần YAML; mặc định thêm overviews và thống kê |
 | `swatprep inspect raster PATH` / `inspect weather PATH` | Xem nhanh thông tin raster (CRS, kích thước, NoData) hoặc CSV khí tượng |
 | `swatprep convert climate DATA_DIR OUT_DIR` | Gộp `R_*.day`, `Tx_*.day`, `Tm_*.day` thành CSV theo trạm |
 | `swatprep convert streamflow SOURCE OUT [--format ...]` | Dòng chảy dạng rộng hoặc theo trạm -> dạng dài |

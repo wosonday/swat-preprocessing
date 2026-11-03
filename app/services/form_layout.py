@@ -11,7 +11,7 @@ from swatprep.config import (
 # Field order per model. Every field of every config model must appear here (checked by tests).
 LAYOUT: dict[type[BaseModel], list[str]] = {
     SWATPrepConfig: ["project", "clip", "dem", "landuse", "soil", "weather", "streamflow"],
-    ProjectConfig: ["name", "crs", "boundary", "output_dir", "targets"],
+    ProjectConfig: ["name", "crs", "boundary", "output_dir", "targets", "overviews"],
     ClipItemConfig: ["src", "dst", "mask", "resampling", "resolution"],
     DEMConfig: ["path", "output_name", "clip", "resampling", "resolution"],
     LandUseConfig: ["raster", "lookup", "source_code_col", "swat_code_col", "swat_name_col",

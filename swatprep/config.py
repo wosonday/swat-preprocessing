@@ -55,6 +55,13 @@ class ProjectConfig(BaseModel):
             "(SWAT 2012 text files). With both, each gets its own sub-folder."
         ),
     )
+    overviews: bool = Field(
+        default=True,
+        description=(
+            "Add overviews (image pyramids) to the clipped rasters so the web app's map opens them quickly. "
+            "Pixel values are unchanged; files grow by about a third (less for land use and soil)."
+        ),
+    )
 
 
 class DEMConfig(BaseModel):

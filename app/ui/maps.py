@@ -2,14 +2,27 @@
 from __future__ import annotations
 
 import base64
+import json
 
 import pydeck as pdk
+from pydeck.bindings.json_tools import default_serialize
 
 from app.services.overlays import OverlayView
 from app.services.raster_view import LayerView
 
 BASEMAPS = ["Light", "Dark", "None"]
 BOUNDARY = [26, 116, 255]   # theme blue #1a74ff
+
+
+class CompactDeck(pdk.Deck):
+    """A Deck whose JSON has no indentation.
+
+    Streamlit sends `deck.to_json()` to the browser on every rerun, and pydeck indents it (one number per
+    line), which makes outlines about three times larger. Same content, compact separators.
+    """
+
+    def to_json(self) -> str:
+        return json.dumps(self, sort_keys=True, default=default_serialize, separators=(",", ":"))
 
 
 def _rgb(color: str) -> list[int]:
@@ -48,6 +61,7 @@ def layer_deck(view: LayerView | None, boundary: dict | None, opacity: float, ba
     state = pdk.data_utils.compute_view(_bounds_of(view, list(overlays)))
     tooltip = {"text": "{label}"} if overlays else False
     if basemap == "None":
-        return pdk.Deck(layers=layers, initial_view_state=state, map_provider=None, map_style=None, tooltip=tooltip)
-    return pdk.Deck(layers=layers, initial_view_state=state, map_provider="carto", map_style=basemap.lower(),
-                    tooltip=tooltip)
+        return CompactDeck(layers=layers, initial_view_state=state, map_provider=None, map_style=None,
+                           tooltip=tooltip)
+    return CompactDeck(layers=layers, initial_view_state=state, map_provider="carto", map_style=basemap.lower(),
+                       tooltip=tooltip)

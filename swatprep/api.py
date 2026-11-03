@@ -76,7 +76,8 @@ class SWATPrepProject:
         if "clip" in domains_to_run and cfg.clip is not None:
             from .core.clip import ClipProcessor
 
-            result = ClipProcessor(cfg.clip, cfg.project.boundary, cfg.project.crs).run()
+            result = ClipProcessor(cfg.clip, cfg.project.boundary, cfg.project.crs,
+                                   cfg.project.overviews).run()
             all_qa.extend(result.qa)
             domains_run.append("clip")
 
@@ -90,7 +91,8 @@ class SWATPrepProject:
 
             boundary = clip_into_output(cfg.dem.path, cfg.dem.output_name, output_dir / "spatial",
                                         cfg.project.boundary, cfg.dem.clip, all_qa,
-                                        cfg.project.crs, cfg.dem.resampling, cfg.dem.resolution)
+                                        cfg.project.crs, cfg.dem.resampling, cfg.dem.resolution,
+                                        cfg.project.overviews)
             result = DEMPreprocessor(cfg.dem, project_crs=cfg.project.crs, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("dem")
@@ -115,7 +117,7 @@ class SWATPrepProject:
             lu = cfg.landuse
             boundary = clip_into_output(lu.raster, lu.output_name, output_dir / "landuse",
                                         cfg.project.boundary, lu.clip, all_qa,
-                                        cfg.project.crs, "nearest", lu.resolution)
+                                        cfg.project.crs, "nearest", lu.resolution, cfg.project.overviews)
             result = LandUsePreprocessor(lu, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("landuse")
@@ -139,7 +141,7 @@ class SWATPrepProject:
             so = cfg.soil
             boundary = clip_into_output(so.raster, so.output_name, output_dir / "soil",
                                         cfg.project.boundary, so.clip, all_qa,
-                                        cfg.project.crs, "nearest", so.resolution)
+                                        cfg.project.crs, "nearest", so.resolution, cfg.project.overviews)
             result = SoilPreprocessor(so, boundary=boundary).run()
             all_qa.extend(result.qa)
             domains_run.append("soil")
